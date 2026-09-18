@@ -9,6 +9,7 @@ import type { AgentStateStore } from './agentStateStore.js';
 import type {
   AssetCache,
   ReloadAssetsSideEffect,
+  RunManagerTaskSideEffect,
   SetHooksEnabledSideEffect,
 } from './clientMessageHandler.js';
 import {
@@ -69,6 +70,7 @@ export class PixelAgentsServer {
     assetCache?: AssetCache;
     onSetHooksEnabled?: SetHooksEnabledSideEffect;
     onReloadAssets?: ReloadAssetsSideEffect;
+    onRunManagerTask?: RunManagerTaskSideEffect;
   }): Promise<ServerConfig> {
     const embedded = options?.embedded ?? true;
     const wantsSpa = !embedded;
@@ -106,6 +108,7 @@ export class PixelAgentsServer {
       onHookEvent: (providerId, event) => this.callback?.(providerId, event),
       onSetHooksEnabled: options?.onSetHooksEnabled,
       onReloadAssets: options?.onReloadAssets,
+      onRunManagerTask: options?.onRunManagerTask,
     });
 
     this.app = app;
