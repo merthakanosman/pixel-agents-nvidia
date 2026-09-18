@@ -254,6 +254,11 @@ async function main(): Promise<void> {
       console.log('[Pixel Agents] Assets reloaded (external directory change)');
     };
 
+    const managerWorker = manager;
+    const onRunManagerTask = managerWorker
+      ? async (task: string) => (await managerWorker.run(task)).content
+      : undefined;
+
     const config = await server.start({
       store,
       runtime,
@@ -264,9 +269,7 @@ async function main(): Promise<void> {
       assetCache,
       onSetHooksEnabled,
       onReloadAssets,
-      onRunManagerTask: manager
-        ? async (task: string) => (await manager.run(task)).content
-        : undefined,
+      onRunManagerTask,
     });
     currentConfig = { port: config.port, token: config.token };
 
