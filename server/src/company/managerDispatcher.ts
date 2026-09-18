@@ -1,7 +1,7 @@
-import type { CompanyTask, ManagerPlan } from './types.js';
-import { CompanyTaskStore } from './companyTaskStore.js';
-import type { WorkerRegistry } from './workerRegistry.js';
 import type { ManagerWorker } from '../workers/managerWorker.js';
+import { CompanyTaskStore } from './companyTaskStore.js';
+import type { CompanyTask, ManagerPlan } from './types.js';
+import type { WorkerRegistry } from './workerRegistry.js';
 
 function extractJsonObject(text: string): string {
   const trimmed = text.trim();
