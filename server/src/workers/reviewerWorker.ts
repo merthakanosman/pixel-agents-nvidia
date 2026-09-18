@@ -99,6 +99,25 @@ function compactOutput(value: string): string {
   return `[output truncated for model context]\n${value.slice(-MAX_MODEL_OUTPUT_CHARS)}`;
 }
 
+function normalizeInspectionPath(value: string): string {
+  const normalized = value.replaceAll('\\\\', '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  return normalized || '.';
+}
+
+function rememberListedDirectories(result: unknown, knownDirectories: Set<string>): void {
+  if (!result || typeof result !== 'object') return;
+
+  const record = result as Record<string, unknown>;
+  if (record['action'] !== 'list' || !Array.isArray(record['entries'])) return;
+
+  for (const entry of record['entries']) {
+    if (!entry || typeof entry !== 'object') continue;
+    const item = entry as Record<string, unknown>;
+    if (item['type'] !== 'directory' || typeof item['path'] !== 'string') continue;
+    knownDirectories.add(normalizeInspectionPath(item['path']));
+  }
+}
+
 export class ReviewerWorker {
   private agentId: number | null = null;
   private readonly fileTools: WorkspaceFileTools;
@@ -187,6 +206,7 @@ export class ReviewerWorker {
       const evidence: string[] = [];
       const listedPaths = new Set<string>();
       const readPaths = new Set<string>();
+      const knownDirectories = new Set<string>();
       let lastResponse: AiGenerateResponse | null = null;
       let workspaceToolSteps = 0;
 
@@ -235,8 +255,24 @@ export class ReviewerWorker {
           };
         }
 
-        const normalizedPath = action.path ?? '.';
+        const normalizedPath = normalizeInspectionPath(action.path ?? '.');
         const seenSet = action.action === 'read' ? readPaths : listedPaths;
+
+        if (action.action === 'read' && knownDirectories.has(normalizedPath)) {
+          const directoryEvidence = `READ ${normalizedPath} SKIPPED: known directory`;
+          evidence.push(directoryEvidence);
+          messages.push({
+            role: 'user',
+            content: `TOOL_RESULT\n${JSON.stringify({
+              ok: false,
+              action: 'read',
+              path: normalizedPath,
+              error: 'Path is a known directory. Use LIST for this path instead. This blocked request did not consume the LIST/READ tool limit.',
+              suggestedAction: 'list',
+            })}`,
+          });
+          continue;
+        }
 
         if (seenSet.has(normalizedPath)) {
           const duplicateEvidence = `${action.action.toUpperCase()} ${normalizedPath} SKIPPED: duplicate inspection request`;
@@ -270,6 +306,9 @@ export class ReviewerWorker {
         workspaceToolSteps += 1;
         const toolResult = await this.executeAction(id, agent, workspaceToolSteps - 1, action);
         evidence.push(toolResult.evidence);
+        if (action.action === 'list') {
+          rememberListedDirectories(toolResult.result, knownDirectories);
+        }
         messages.push({
           role: 'user',
           content: `TOOL_RESULT\n${JSON.stringify(toolResult.result)}`,
