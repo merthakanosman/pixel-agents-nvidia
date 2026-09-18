@@ -68,8 +68,25 @@ export class ManagerDispatcher {
       this.taskStore.update(task.id, { status: 'running' });
 
       try {
+        const previousResults = completed
+          .filter((previous) => previous.status === 'completed' && previous.result)
+          .map(
+            (previous) =>
+              `[${previous.assignee}] ${previous.title}:\n${previous.result ?? ''}`,
+          )
+          .join('\n\n');
+
         const result = await worker.run(
-          `Company task: ${task.title}\n\n${task.description}\n\nReturn a concise work result for the Manager.`,
+          [
+            `Company task: ${task.title}`,
+            task.description,
+            previousResults
+              ? `Previous completed company work you may need to validate or build on:\n\n${previousResults}`
+              : '',
+            'Return a concise work result for the Manager.',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
         );
         this.taskStore.update(task.id, {
           status: 'completed',
