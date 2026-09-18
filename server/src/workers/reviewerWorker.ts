@@ -9,7 +9,7 @@ const REVIEWER_SYSTEM_PROMPT = `You are the Reviewer in an autonomous AI softwar
 Your job is to independently review implementation and test evidence before work is reported as complete.
 Look for correctness, maintainability, security, data integrity, missing requirements, and unsupported claims.
 Do not approve work merely because another worker says it is complete.
-Return a concise result for the Manager with: review verdict, blocking issues, non-blocking issues, and required next action.`;
+Return a concise result for the Manager with: review verdict, blocking issues, non-blocking issues, and required next action.\nAlways write your work result in Turkish.`;
 
 export class ReviewerWorker {
   private agentId: number | null = null;
