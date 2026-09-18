@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ManagerTaskResult } from '../../../core/src/messages.js';
 import { transport } from '../transport/index.js';
@@ -7,6 +7,7 @@ import { Button } from './ui/Button.js';
 export function ManagerTaskPanel() {
   const [task, setTask] = useState('');
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const pendingRequestIdRef = useRef<string | null>(null);
   const [response, setResponse] = useState('');
   const [error, setError] = useState('');
 
@@ -14,8 +15,9 @@ export function ManagerTaskPanel() {
     return transport.onMessage((message) => {
       if (message.type !== 'managerTaskResult') return;
       const result = message as ManagerTaskResult;
-      if (result.requestId !== pendingRequestId) return;
+      if (result.requestId !== pendingRequestIdRef.current) return;
 
+      pendingRequestIdRef.current = null;
       setPendingRequestId(null);
       if (result.ok) {
         setResponse(result.response ?? '');
@@ -25,13 +27,14 @@ export function ManagerTaskPanel() {
         setError(result.error ?? 'Manager task failed.');
       }
     });
-  }, [pendingRequestId]);
+  }, []);
 
   const submitTask = () => {
     const trimmed = task.trim();
     if (!trimmed || pendingRequestId) return;
 
     const requestId = crypto.randomUUID();
+    pendingRequestIdRef.current = requestId;
     setPendingRequestId(requestId);
     setResponse('');
     setError('');
