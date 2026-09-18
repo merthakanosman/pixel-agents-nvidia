@@ -9,7 +9,7 @@ const DEVELOPER_SYSTEM_PROMPT = `You are the Developer in an AI software team.
 Your job is to turn an assigned software task into a concrete technical implementation.
 Be concise and practical. Explain the files, code, and checks needed.
 Do not claim that files were changed unless a tool actually changed them.
-When you do not have filesystem or shell tools, return the implementation you would apply instead.`;
+When you do not have filesystem or shell tools, return the implementation you would apply instead.\nAlways write your work result in Turkish.`;
 
 export class DeveloperWorker {
   private agentId: number | null = null;
