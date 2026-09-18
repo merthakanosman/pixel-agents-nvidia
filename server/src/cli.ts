@@ -159,8 +159,9 @@ async function main(): Promise<void> {
     const runtime = new AgentRuntime(store, claudeProvider, nvidiaProvider);
 
     const nvidiaModel = process.env['NVIDIA_MODEL'];
+    let manager: ManagerWorker | null = null;
     if (nvidiaProvider.isConfigured() && nvidiaModel) {
-      const manager = new ManagerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
+      manager = new ManagerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
       const managerId = manager.spawn();
       console.log(
         `[Pixel Agents] NVIDIA Manager worker ready (agent ${managerId}, model ${nvidiaModel})`,
@@ -263,6 +264,9 @@ async function main(): Promise<void> {
       assetCache,
       onSetHooksEnabled,
       onReloadAssets,
+      onRunManagerTask: manager
+        ? async (task: string) => (await manager.run(task)).content
+        : undefined,
     });
     currentConfig = { port: config.port, token: config.token };
 
