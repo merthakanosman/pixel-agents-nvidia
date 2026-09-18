@@ -34,6 +34,7 @@ import {
   nvidiaProvider,
 } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
+import { DeveloperWorker } from './workers/developerWorker.js';
 import { ManagerWorker } from './workers/managerWorker.js';
 
 // ── Argument parsing ──────────────────────────────────────────
@@ -160,15 +161,23 @@ async function main(): Promise<void> {
 
     const nvidiaModel = process.env['NVIDIA_MODEL'];
     let manager: ManagerWorker | null = null;
+    let developer: DeveloperWorker | null = null;
     if (nvidiaProvider.isConfigured() && nvidiaModel) {
       manager = new ManagerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
+      developer = new DeveloperWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
+
       const managerId = manager.spawn();
+      const developerId = developer.spawn();
+
       console.log(
         `[Pixel Agents] NVIDIA Manager worker ready (agent ${managerId}, model ${nvidiaModel})`,
       );
+      console.log(
+        `[Pixel Agents] NVIDIA Developer worker ready (agent ${developerId}, model ${nvidiaModel})`,
+      );
     } else {
       console.warn(
-        '[Pixel Agents] NVIDIA Manager worker not started: NVIDIA_API_KEY or NVIDIA_MODEL is missing.',
+        '[Pixel Agents] NVIDIA workers not started: NVIDIA_API_KEY or NVIDIA_MODEL is missing.',
       );
     }
 
