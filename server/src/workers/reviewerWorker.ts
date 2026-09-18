@@ -11,6 +11,7 @@ import type { AgentState } from '../types.js';
 
 const REVIEWER_AGENT_ID = 100_004;
 const MAX_TOOL_STEPS = 4;
+const MAX_MODEL_STEPS = 8;
 const MAX_MODEL_OUTPUT_CHARS = 24_000;
 
 type ReviewerAction =
@@ -185,6 +186,7 @@ export class ReviewerWorker {
       const listedPaths = new Set<string>();
       const readPaths = new Set<string>();
       let lastResponse: AiGenerateResponse | null = null;
+      let workspaceToolSteps = 0;
 
       for (const gitAction of ['status', 'diff'] as const) {
         const toolResult = await this.executeGitInspection(id, agent, gitAction);
@@ -195,7 +197,7 @@ export class ReviewerWorker {
         });
       }
 
-      for (let step = 0; step < MAX_TOOL_STEPS; step++) {
+      for (let step = 0; step < MAX_MODEL_STEPS; step++) {
         const response = await this.provider.generate({
           model: this.model,
           messages,
@@ -249,8 +251,22 @@ export class ReviewerWorker {
           continue;
         }
 
+        if (workspaceToolSteps >= MAX_TOOL_STEPS) {
+          messages.push({
+            role: 'user',
+            content: `TOOL_RESULT\n${JSON.stringify({
+              ok: false,
+              action: action.action,
+              path: normalizedPath,
+              error: `Reviewer LIST/READ limit reached (${MAX_TOOL_STEPS}). Use existing evidence and return final now.`,
+            })}`,
+          });
+          continue;
+        }
+
         seenSet.add(normalizedPath);
-        const toolResult = await this.executeAction(id, agent, step, action);
+        workspaceToolSteps += 1;
+        const toolResult = await this.executeAction(id, agent, workspaceToolSteps - 1, action);
         evidence.push(toolResult.evidence);
         messages.push({
           role: 'user',
@@ -266,7 +282,7 @@ export class ReviewerWorker {
       return {
         ...lastResponse,
         content:
-          `İnceleme tamamlanamadı: Reviewer en fazla ${MAX_TOOL_STEPS} LIST/READ adımını kullandı ve FINAL yanıtına ulaşamadı. Mevcut gerçek kanıtlar aşağıdadır; bu sonuç tamamlanmış onay sayılmaz.\n\n` +
+          `İnceleme tamamlanamadı: Reviewer ${workspaceToolSteps}/${MAX_TOOL_STEPS} benzersiz LIST/READ adımı kullandı ancak FINAL yanıtına ulaşamadı. Mevcut gerçek kanıtlar aşağıdadır; bu sonuç tamamlanmış onay sayılmaz.\n\n` +
           `İnceleme kanıtı:\n${evidenceText}`,
       };
     } finally {
