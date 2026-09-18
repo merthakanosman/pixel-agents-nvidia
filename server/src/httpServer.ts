@@ -213,6 +213,7 @@ function registerWebSocketRoute(app: FastifyInstance, options: HttpServerOptions
           cache: options.assetCache ?? null,
           onSetHooksEnabled: options.onSetHooksEnabled,
           onReloadAssets: options.onReloadAssets,
+          onRunManagerTask: options.onRunManagerTask,
           privileged,
         });
       } catch {
