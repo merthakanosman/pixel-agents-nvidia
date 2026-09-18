@@ -62,6 +62,49 @@ export type AgentEvent =
     }
   | { kind: 'sessionEnd'; reason?: string };
 
+// ── AI inference Provider (LLM backends such as NVIDIA) ───────
+
+export type AiMessageRole = 'system' | 'user' | 'assistant';
+
+export interface AiMessage {
+  role: AiMessageRole;
+  content: string;
+}
+
+export interface AiGenerateRequest {
+  model: string;
+  messages: readonly AiMessage[];
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface AiGenerateResponse {
+  model: string;
+  content: string;
+  finishReason?: string;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+}
+
+/**
+ * Model inference boundary used by the agent runtime.
+ *
+ * HookProvider describes how an external coding CLI reports activity.
+ * AiProvider describes the model backend that powers our own workers. Keeping
+ * these separate lets Pixel Agents retain its office/event system while NVIDIA
+ * replaces Claude as the intelligence layer.
+ */
+export interface AiProvider {
+  readonly kind: 'ai';
+  readonly id: string;
+  readonly displayName: string;
+  isConfigured(): boolean;
+  generate(request: AiGenerateRequest): Promise<AiGenerateResponse>;
+}
+
 // ── Hook-based Provider (CLIs with hooks APIs) ────────────────
 
 export interface HookProvider {
