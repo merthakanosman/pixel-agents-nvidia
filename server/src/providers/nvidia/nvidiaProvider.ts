@@ -5,17 +5,18 @@ import type {
 } from '../../../../core/src/provider.js';
 import { NvidiaClient } from './nvidiaClient.js';
 
-const client = new NvidiaClient({
-  apiKey: process.env['NVIDIA_API_KEY'],
-  baseUrl: process.env['NVIDIA_API_BASE_URL'],
-});
+function createClient(): NvidiaClient {
+  return new NvidiaClient({
+    apiKey: process.env['NVIDIA_API_KEY'],
+    baseUrl: process.env['NVIDIA_API_BASE_URL'],
+  });
+}
 
 /**
  * NVIDIA-backed inference provider.
  *
- * This first scaffold only registers the provider with the runtime. The HTTP
- * transport and model selection are added separately so the existing Pixel
- * Agents office can stay unchanged while the AI backend is replaced.
+ * The client is created lazily so environment variables loaded after module
+ * import (for example from .env in local development) are still picked up.
  */
 export const nvidiaProvider: AiProvider = {
   kind: 'ai',
@@ -23,10 +24,10 @@ export const nvidiaProvider: AiProvider = {
   displayName: 'NVIDIA',
 
   isConfigured(): boolean {
-    return client.isConfigured();
+    return createClient().isConfigured();
   },
 
   generate(request: AiGenerateRequest): Promise<AiGenerateResponse> {
-    return client.generate(request);
+    return createClient().generate(request);
   },
 };
