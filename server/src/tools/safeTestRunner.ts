@@ -63,23 +63,38 @@ export class SafeTestRunner {
     command: string,
     args: readonly string[],
     cwd = '.',
-    timeoutMs = DEFAULT_TIMEOUT_MS,
+    timeoutMs?: number,
   ): Promise<SafeTestRunResult> {
     const safeCwd = this.resolveCwd(cwd);
     this.validateCommand(command, args);
 
-    const effectiveTimeout = Math.min(Math.max(timeoutMs, 1_000), MAX_TIMEOUT_MS);
-    const executable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const effectiveTimeout = Math.min(
+      Math.max(timeoutMs ?? DEFAULT_TIMEOUT_MS, 1_000),
+      MAX_TIMEOUT_MS,
+    );
     const startedAt = Date.now();
 
     return await new Promise<SafeTestRunResult>((resolve, reject) => {
-      const child = spawn(executable, [...args], {
-        cwd: safeCwd,
-        env: minimalChildEnv(),
-        shell: false,
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+      const child =
+        process.platform === 'win32'
+          ? spawn(
+              process.env.ComSpec ?? 'cmd.exe',
+              ['/d', '/s', '/c', ['npm.cmd', ...args].join(' ')],
+              {
+                cwd: safeCwd,
+                env: minimalChildEnv(),
+                shell: false,
+                windowsHide: true,
+                stdio: ['ignore', 'pipe', 'pipe'],
+              },
+            )
+          : spawn('npm', [...args], {
+              cwd: safeCwd,
+              env: minimalChildEnv(),
+              shell: false,
+              windowsHide: true,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
 
       let stdout = '';
       let stderr = '';
