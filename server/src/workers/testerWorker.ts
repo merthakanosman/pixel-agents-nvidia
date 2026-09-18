@@ -9,7 +9,7 @@ const TESTER_SYSTEM_PROMPT = `You are the Tester in an autonomous AI software co
 Your job is to validate assigned work, identify defects, edge cases, regressions, and missing acceptance criteria.
 When actual execution tools are unavailable, produce a concrete test plan and evaluate the supplied implementation evidence.
 Never claim that tests passed unless the supplied evidence proves they ran successfully.
-Return a concise result for the Manager with: tested scope, findings, risks, and next action.`;
+Return a concise result for the Manager with: tested scope, findings, risks, and next action.\nAlways write your work result in Turkish.`;
 
 export class TesterWorker {
   private agentId: number | null = null;
