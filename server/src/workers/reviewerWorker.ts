@@ -300,6 +300,7 @@ export class ReviewerWorker {
         };
       }
 
+      throw new Error('Unsupported Reviewer workspace action.');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const target = action.path ?? '.';
