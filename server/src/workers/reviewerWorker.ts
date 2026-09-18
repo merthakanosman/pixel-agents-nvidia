@@ -50,7 +50,7 @@ function extractJsonObject(text: string): string {
   const trimmed = text.trim();
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
 
-  const fenced = trimmed.match(/\`\`\`(?:json)?\\s*([\\s\\S]*?)\\s*\`\`\`/i);
+  const fenced = trimmed.match(/\`\`\`(?:json)?\s*([\s\S]*?)\s*\`\`\`/i);
   if (fenced?.[1]) return fenced[1].trim();
 
   const start = trimmed.indexOf('{');
@@ -96,7 +96,7 @@ function parseAction(text: string): ReviewerAction {
 
 function compactOutput(value: string): string {
   if (value.length <= MAX_MODEL_OUTPUT_CHARS) return value;
-  return `[output truncated for model context]\\n${value.slice(-MAX_MODEL_OUTPUT_CHARS)}`;
+  return `[output truncated for model context]\n${value.slice(-MAX_MODEL_OUTPUT_CHARS)}`;
 }
 
 export class ReviewerWorker {
@@ -181,7 +181,7 @@ export class ReviewerWorker {
         { role: 'system', content: REVIEWER_SYSTEM_PROMPT },
         {
           role: 'user',
-          content: `Workspace root: ${this.fileTools.getRoot()}\\n\\nAssigned review task:\\n${task}`,
+          content: `Workspace root: ${this.fileTools.getRoot()}\n\nAssigned review task:\n${task}`,
         },
       ];
       const evidence: string[] = [];
@@ -212,12 +212,12 @@ export class ReviewerWorker {
         if (action.action === 'final') {
           const evidenceText =
             evidence.length > 0
-              ? evidence.map((entry) => `- ${entry}`).join('\\n')
+              ? evidence.map((entry) => `- ${entry}`).join('\n')
               : '- Gerçek workspace inceleme aracı kullanılmadı.';
 
           return {
             ...response,
-            content: `${action.summary}\\n\\nİnceleme kanıtı:\\n${evidenceText}`,
+            content: `${action.summary}\n\nİnceleme kanıtı:\n${evidenceText}`,
           };
         }
 
@@ -225,7 +225,7 @@ export class ReviewerWorker {
         evidence.push(toolResult.evidence);
         messages.push({
           role: 'user',
-          content: `TOOL_RESULT\\n${JSON.stringify(toolResult.result)}`,
+          content: `TOOL_RESULT\n${JSON.stringify(toolResult.result)}`,
         });
       }
 
