@@ -3,6 +3,8 @@ import { DEFAULT_MAX_CONTEXT_TOKENS } from '../constants.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import type { AgentState } from '../types.js';
 
+const MANAGER_AGENT_ID = 100_001;
+
 const MANAGER_SYSTEM_PROMPT = `You are the Manager in an AI software team.
 Your job is to understand the user's goal, turn it into a clear plan, and decide which specialist should handle each part.
 Available specialist roles will include Developer, Tester, and Reviewer.
@@ -24,7 +26,7 @@ export class ManagerWorker {
       return this.agentId;
     }
 
-    const id = this.store.nextAgentId.current++;
+    const id = MANAGER_AGENT_ID;
     const agent: AgentState = {
       id,
       sessionId: `nvidia-manager-${id}`,
