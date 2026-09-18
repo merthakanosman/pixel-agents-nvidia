@@ -11,11 +11,21 @@
  * than reaching into each provider directory directly.
  */
 
-import type { HookProvider } from '../../../core/src/provider.js';
+import type { AiProvider, HookProvider } from '../../../core/src/provider.js';
 import { claudeProvider } from './hook/claude/claude.js';
+import { nvidiaProvider } from './nvidia/nvidiaProvider.js';
 
-export { claudeProvider };
+export { claudeProvider, nvidiaProvider };
 export { copyHookScript } from './hook/claude/claudeHookInstaller.js';
+
+
+/** AI inference providers power workers created by Pixel Agents itself. */
+export const aiProviders: readonly AiProvider[] = [nvidiaProvider];
+
+/** Resolve an AI inference provider by id. */
+export function aiProviderById(id: unknown): AiProvider | undefined {
+  return typeof id === 'string' ? aiProviders.find((p) => p.id === id) : undefined;
+}
 
 /** Every bundled hook provider, in registration order. The consent gate loops
  *  over this at the webviewReady handshake (one ask per provider that needs
