@@ -1,4 +1,4 @@
-import type { AiGenerateResponse, AiProvider } from '../../core/src/provider.js';
+import type { AiGenerateResponse, AiProvider } from '../../../core/src/provider.js';
 import { DEFAULT_MAX_CONTEXT_TOKENS } from '../constants.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import type { AgentState } from '../types.js';
