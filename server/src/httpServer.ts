@@ -10,6 +10,7 @@ import type { AgentStateStore } from './agentStateStore.js';
 import type {
   AssetCache,
   ReloadAssetsSideEffect,
+  RunManagerTaskSideEffect,
   SetHooksEnabledSideEffect,
 } from './clientMessageHandler.js';
 import { handleClientMessage } from './clientMessageHandler.js';
@@ -45,6 +46,8 @@ export interface HttpServerOptions {
   onSetHooksEnabled?: SetHooksEnabledSideEffect;
   /** Invoked when an external asset directory is added/removed. Standalone reloads + re-broadcasts assets here. */
   onReloadAssets?: ReloadAssetsSideEffect;
+  /** Invoked when a browser client submits a task to the NVIDIA Manager. */
+  onRunManagerTask?: RunManagerTaskSideEffect;
 }
 
 /** Result of createHttpServer(). */
