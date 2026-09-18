@@ -19,6 +19,9 @@ import {
   loadAllPets,
 } from './assetReload.js';
 import type { AssetCache, ReloadAssetsSideEffect } from './clientMessageHandler.js';
+import { CompanyTaskStore } from './company/companyTaskStore.js';
+import { ManagerDispatcher } from './company/managerDispatcher.js';
+import { WorkerRegistry } from './company/workerRegistry.js';
 import {
   getHooksConsent,
   getHooksEnabled,
@@ -264,9 +267,24 @@ async function main(): Promise<void> {
     };
 
     const managerWorker = manager;
-    const onRunManagerTask = managerWorker
-      ? async (task: string) => (await managerWorker.run(task)).content
-      : undefined;
+    const developerWorker = developer;
+    let onRunManagerTask: ((task: string) => Promise<string>) | undefined;
+
+    if (managerWorker && developerWorker) {
+      const workerRegistry = new WorkerRegistry();
+      workerRegistry.register({
+        role: 'developer',
+        displayName: 'Developer',
+        agentId: developerWorker.spawn(),
+        run: (task: string) => developerWorker.run(task),
+      });
+
+      const companyTaskStore = new CompanyTaskStore();
+      const dispatcher = new ManagerDispatcher(managerWorker, workerRegistry, companyTaskStore);
+      onRunManagerTask = (task: string) => dispatcher.run(task);
+
+      console.log('[Pixel Agents] Autonomous company dispatcher ready (developer registered)');
+    }
 
     const config = await server.start({
       store,
