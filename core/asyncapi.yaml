@@ -118,6 +118,7 @@ components:
         - $ref: '#/components/schemas/WorkspaceFolders'
         # Diagnostics
         - $ref: '#/components/schemas/AgentDiagnostics'
+        - $ref: '#/components/schemas/ManagerTaskResult'
       discriminator: type
 
     ClientMessage:
@@ -143,6 +144,7 @@ components:
         - $ref: '#/components/schemas/RemoveExternalAssetDirectory'
         - $ref: '#/components/schemas/SaveAreaMappings'
         - $ref: '#/components/schemas/SetShowAreas'
+        - $ref: '#/components/schemas/ManagerTask'
         - $ref: '#/components/schemas/RequestDiagnostics'
       discriminator: type
 
@@ -786,6 +788,23 @@ components:
           items:
             type: object
 
+    ManagerTaskResult:
+      description: Result of a task sent to the NVIDIA-backed Manager worker.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, ok]
+      properties:
+        type:
+          const: managerTaskResult
+        requestId:
+          type: string
+        ok:
+          type: boolean
+        response:
+          type: string
+        error:
+          type: string
+
     # ── Client message variants ────────────────────────────────────
 
     WebviewReady:
@@ -1054,6 +1073,19 @@ components:
           const: setShowAreas
         enabled:
           type: boolean
+
+    ManagerTask:
+      description: Send a user task to the NVIDIA-backed Manager worker.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, task]
+      properties:
+        type:
+          const: managerTask
+        requestId:
+          type: string
+        task:
+          type: string
 
     RequestDiagnostics:
       description: Request agent connection diagnostics (server responds with agentDiagnostics).
