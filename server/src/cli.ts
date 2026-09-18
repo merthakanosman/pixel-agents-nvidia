@@ -39,6 +39,8 @@ import {
 import { PixelAgentsServer } from './server.js';
 import { DeveloperWorker } from './workers/developerWorker.js';
 import { ManagerWorker } from './workers/managerWorker.js';
+import { ReviewerWorker } from './workers/reviewerWorker.js';
+import { TesterWorker } from './workers/testerWorker.js';
 
 // ── Argument parsing ──────────────────────────────────────────
 
@@ -165,18 +167,30 @@ async function main(): Promise<void> {
     const nvidiaModel = process.env['NVIDIA_MODEL'];
     let manager: ManagerWorker | null = null;
     let developer: DeveloperWorker | null = null;
+    let tester: TesterWorker | null = null;
+    let reviewer: ReviewerWorker | null = null;
     if (nvidiaProvider.isConfigured() && nvidiaModel) {
       manager = new ManagerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
       developer = new DeveloperWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
+      tester = new TesterWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
+      reviewer = new ReviewerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
 
       const managerId = manager.spawn();
       const developerId = developer.spawn();
+      const testerId = tester.spawn();
+      const reviewerId = reviewer.spawn();
 
       console.log(
         `[Pixel Agents] NVIDIA Manager worker ready (agent ${managerId}, model ${nvidiaModel})`,
       );
       console.log(
         `[Pixel Agents] NVIDIA Developer worker ready (agent ${developerId}, model ${nvidiaModel})`,
+      );
+      console.log(
+        `[Pixel Agents] NVIDIA Tester worker ready (agent ${testerId}, model ${nvidiaModel})`,
+      );
+      console.log(
+        `[Pixel Agents] NVIDIA Reviewer worker ready (agent ${reviewerId}, model ${nvidiaModel})`,
       );
     } else {
       console.warn(
@@ -268,9 +282,11 @@ async function main(): Promise<void> {
 
     const managerWorker = manager;
     const developerWorker = developer;
+    const testerWorker = tester;
+    const reviewerWorker = reviewer;
     let onRunManagerTask: ((task: string) => Promise<string>) | undefined;
 
-    if (managerWorker && developerWorker) {
+    if (managerWorker && developerWorker && testerWorker && reviewerWorker) {
       const workerRegistry = new WorkerRegistry();
       workerRegistry.register({
         role: 'developer',
@@ -278,12 +294,26 @@ async function main(): Promise<void> {
         agentId: developerWorker.spawn(),
         run: (task: string) => developerWorker.run(task),
       });
+      workerRegistry.register({
+        role: 'tester',
+        displayName: 'Tester',
+        agentId: testerWorker.spawn(),
+        run: (task: string) => testerWorker.run(task),
+      });
+      workerRegistry.register({
+        role: 'reviewer',
+        displayName: 'Reviewer',
+        agentId: reviewerWorker.spawn(),
+        run: (task: string) => reviewerWorker.run(task),
+      });
 
       const companyTaskStore = new CompanyTaskStore();
       const dispatcher = new ManagerDispatcher(managerWorker, workerRegistry, companyTaskStore);
       onRunManagerTask = (task: string) => dispatcher.run(task);
 
-      console.log('[Pixel Agents] Autonomous company dispatcher ready (developer registered)');
+      console.log(
+        '[Pixel Agents] Autonomous company dispatcher ready (developer, tester, reviewer registered)',
+      );
     }
 
     const config = await server.start({
