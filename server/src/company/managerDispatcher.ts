@@ -43,7 +43,6 @@ export class ManagerDispatcher {
   ) {}
 
   async run(userRequest: string): Promise<string> {
-    const workers = this.registry.list();
     const planResponse = await this.manager.plan(userRequest, this.registry.describeForManager());
     const plan = parsePlan(planResponse.content);
 
