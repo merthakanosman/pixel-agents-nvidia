@@ -3,18 +3,24 @@ import { loadEnvFile } from 'node:process';
 import { nvidiaProvider } from './nvidiaProvider.js';
 
 try {
-  loadEnvFile();
+  loadEnvFile('.env');
 } catch (err) {
   const code = (err as NodeJS.ErrnoException).code;
   if (code !== 'ENOENT') throw err;
 }
 
-const model = process.env['NVIDIA_MODEL'] ?? 'nvidia/nemotron-3-nano-30b-a3b';
+const model = process.env['NVIDIA_MODEL'];
 
 async function main(): Promise<void> {
   if (!nvidiaProvider.isConfigured()) {
     throw new Error('NVIDIA_API_KEY is missing. Add it to .env first.');
   }
+
+  if (!model) {
+    throw new Error('NVIDIA_MODEL is missing. Add it to .env first.');
+  }
+
+  console.log(`Using model: ${model}`);
 
   const result = await nvidiaProvider.generate({
     model,
