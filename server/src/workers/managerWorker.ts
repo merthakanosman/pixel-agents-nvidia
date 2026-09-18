@@ -93,6 +93,9 @@ Rules:
 - Use only roles from the available workers list.
 - If this is casual conversation or no specialist work is needed, return an empty tasks array and put the answer in reply.
 - Split real work into the smallest useful tasks.
+- Order tasks by dependency because they execute sequentially.
+- For software implementation, normally use Developer first, then Tester, then Reviewer when those roles are available and useful.
+- Tester and Reviewer should validate earlier worker output instead of repeating the same task.
 - Do not invent completion or results.
 - Maximum 6 tasks.
 
