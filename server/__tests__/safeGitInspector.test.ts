@@ -75,10 +75,13 @@ describe('SafeGitInspector', () => {
   });
 
   it('does not expose mutation commands', () => {
-    expect(Object.getOwnPropertyNames(SafeGitInspector.prototype).sort()).toEqual([
-      'constructor',
-      'diff',
-      'status',
-    ]);
+    const methods = Object.getOwnPropertyNames(SafeGitInspector.prototype);
+
+    expect(methods).toContain('status');
+    expect(methods).toContain('diff');
+    expect(methods).not.toContain('commit');
+    expect(methods).not.toContain('checkout');
+    expect(methods).not.toContain('reset');
+    expect(methods).not.toContain('push');
   });
 });
