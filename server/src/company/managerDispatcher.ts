@@ -80,6 +80,7 @@ export class ManagerDispatcher {
           [
             `Company task: ${task.title}`,
             task.description,
+            `Original user request:\n${userRequest}`,
             previousResults
               ? `Previous completed company work you may need to validate or build on:\n\n${previousResults}`
               : '',
