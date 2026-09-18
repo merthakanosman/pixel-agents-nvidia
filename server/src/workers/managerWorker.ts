@@ -1,6 +1,6 @@
 import type { AiGenerateResponse, AiProvider } from '../../../core/src/provider.js';
-import { DEFAULT_MAX_CONTEXT_TOKENS } from '../constants.js';
 import type { AgentStateStore } from '../agentStateStore.js';
+import { DEFAULT_MAX_CONTEXT_TOKENS } from '../constants.js';
 import type { AgentState } from '../types.js';
 
 const MANAGER_AGENT_ID = 100_001;
