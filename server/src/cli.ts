@@ -9,6 +9,7 @@
  */
 
 import * as path from 'path';
+import { loadEnvFile } from 'node:process';
 
 import { AgentRuntime } from './agentRuntime.js';
 import { AgentStateStore } from './agentStateStore.js';
@@ -34,6 +35,7 @@ import {
   nvidiaProvider,
 } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
+import { ManagerWorker } from './workers/managerWorker.js';
 
 // ── Argument parsing ──────────────────────────────────────────
 
@@ -109,6 +111,13 @@ function copyHookScriptOrReport(packageRoot: string, context = ''): boolean {
 // ── Main ──────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  try {
+    loadEnvFile(path.join(process.cwd(), '.env'));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') throw err;
+  }
+
   let args: CliArgs;
   try {
     args = parseArgs(process.argv.slice(2));
@@ -149,6 +158,19 @@ async function main(): Promise<void> {
   try {
     // Create runtime first (before server.start, so we can pass it in)
     const runtime = new AgentRuntime(store, claudeProvider, nvidiaProvider);
+
+    const nvidiaModel = process.env['NVIDIA_MODEL'];
+    if (nvidiaProvider.isConfigured() && nvidiaModel) {
+      const manager = new ManagerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
+      const managerId = manager.spawn();
+      console.log(
+        `[Pixel Agents] NVIDIA Manager worker ready (agent ${managerId}, model ${nvidiaModel})`,
+      );
+    } else {
+      console.warn(
+        '[Pixel Agents] NVIDIA Manager worker not started: NVIDIA_API_KEY or NVIDIA_MODEL is missing.',
+      );
+    }
 
     // Wire hook events: HTTP POST -> runtime -> hookEventHandler -> agents
     server.onHookEvent((providerId, event) => {
