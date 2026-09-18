@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import type { HookProvider } from '../../core/src/provider.js';
+import type { AiProvider, HookProvider } from '../../core/src/provider.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import { DEFAULT_MAX_CONTEXT_TOKENS } from './constants.js';
 import { DismissalTracker } from './dismissalTracker.js';
@@ -88,6 +88,7 @@ export class AgentRuntime {
   constructor(
     private readonly store: AgentStateStore,
     provider: HookProvider,
+    private readonly aiProvider?: AiProvider,
   ) {
     // Wire module-level dependencies
     setDismissalTracker(this.dismissalTracker);
@@ -278,6 +279,11 @@ export class AgentRuntime {
         }
       },
     });
+  }
+
+  /** AI backend that powers Pixel Agents-owned workers, if configured. */
+  getAiProvider(): AiProvider | undefined {
+    return this.aiProvider;
   }
 
   /** Register adapter-specific lifecycle callbacks. */
