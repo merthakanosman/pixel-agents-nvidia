@@ -1,15 +1,16 @@
 import type { AiGenerateResponse, AiProvider } from '../../../core/src/provider.js';
 import type { AgentStateStore } from '../agentStateStore.js';
+import type { ManagerPlan } from '../company/types.js';
 import { DEFAULT_MAX_CONTEXT_TOKENS } from '../constants.js';
 import type { AgentState } from '../types.js';
 
 const MANAGER_AGENT_ID = 100_001;
 
-const MANAGER_SYSTEM_PROMPT = `You are the Manager in an AI software team.
-Your job is to understand the user's goal, turn it into a clear plan, and decide which specialist should handle each part.
-Available specialist roles will include Developer, Tester, and Reviewer.
-Be concise, practical, and explicit about the next action.
-Do not pretend work was completed when it was not.`;
+const MANAGER_SYSTEM_PROMPT = `You are the Manager of an autonomous AI company.
+The user speaks only with you. You decide what work should be delegated, assign it to available specialist workers, collect their results, and report back to the user.
+Be concise, practical, and explicit.
+Never claim that work was completed unless a worker result confirms it.
+Never invent workers that are not listed as available.`;
 
 export class ManagerWorker {
   private agentId: number | null = null;
@@ -66,7 +67,76 @@ export class ManagerWorker {
     return id;
   }
 
-  async run(task: string): Promise<AiGenerateResponse> {
+  run(task: string): Promise<AiGenerateResponse> {
+    return this.runTurn('Thinking', 'Reasoning', task, 1200);
+  }
+
+  plan(userRequest: string, availableWorkers: string): Promise<AiGenerateResponse> {
+    const planningPrompt = `Create a delegation plan for the user's request.
+
+Available workers:
+${availableWorkers || '- none'}
+
+Return JSON only, with exactly this shape:
+{
+  "reply": "optional direct reply when no delegation is needed",
+  "tasks": [
+    {
+      "title": "short task title",
+      "description": "clear task instructions",
+      "assignee": "one available worker role"
+    }
+  ]
+}
+
+Rules:
+- Use only roles from the available workers list.
+- If this is casual conversation or no specialist work is needed, return an empty tasks array and put the answer in reply.
+- Split real work into the smallest useful tasks.
+- Do not invent completion or results.
+- Maximum 6 tasks.
+
+User request:
+${userRequest}`;
+
+    return this.runTurn('Planning company work', 'Planning', planningPrompt, 1600);
+  }
+
+  summarize(
+    userRequest: string,
+    plan: ManagerPlan,
+    results: Array<{
+      title: string;
+      assignee: string;
+      status: string;
+      result?: string;
+      error?: string;
+    }>,
+  ): Promise<AiGenerateResponse> {
+    const summaryPrompt = `Report the company's completed work back to the user.
+
+Original user request:
+${userRequest}
+
+Delegation plan:
+${JSON.stringify(plan, null, 2)}
+
+Worker results:
+${JSON.stringify(results, null, 2)}
+
+Give the user one concise final report.
+Clearly distinguish completed work from failed or incomplete work.
+Do not invent actions, files, sales, designs, tests, or other outcomes that are not present in the worker results.`;
+
+    return this.runTurn('Reviewing team results', 'Reviewing', summaryPrompt, 1800);
+  }
+
+  private async runTurn(
+    status: string,
+    toolName: string,
+    prompt: string,
+    maxTokens: number,
+  ): Promise<AiGenerateResponse> {
     const id = this.spawn();
     const agent = this.store.get(id);
     if (!agent) {
@@ -75,8 +145,8 @@ export class ManagerWorker {
 
     const toolId = `manager-turn-${Date.now()}`;
     agent.activeToolIds.add(toolId);
-    agent.activeToolStatuses.set(toolId, 'Planning task');
-    agent.activeToolNames.set(toolId, 'Reasoning');
+    agent.activeToolStatuses.set(toolId, status);
+    agent.activeToolNames.set(toolId, toolName);
     agent.isWaiting = false;
     agent.lastDataAt = Date.now();
 
@@ -84,8 +154,8 @@ export class ManagerWorker {
       type: 'agentToolStart',
       id,
       toolId,
-      status: 'Planning task',
-      toolName: 'Reasoning',
+      status,
+      toolName,
     });
     this.store.broadcast({ type: 'agentStatus', id, status: 'active' });
 
@@ -94,10 +164,10 @@ export class ManagerWorker {
         model: this.model,
         messages: [
           { role: 'system', content: MANAGER_SYSTEM_PROMPT },
-          { role: 'user', content: task },
+          { role: 'user', content: prompt },
         ],
         temperature: 0.2,
-        maxTokens: 1200,
+        maxTokens,
       });
 
       const totalTokens = response.usage?.totalTokens;
