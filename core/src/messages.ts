@@ -38,7 +38,8 @@ export type ServerMessage =
   | ExternalAssetDirectoriesUpdated
   | AreaMappingsLoaded
   | WorkspaceFolders
-  | AgentDiagnostics;
+  | AgentDiagnostics
+  | ManagerTaskResult;
 
 export type ClientMessage =
   | WebviewReady
@@ -62,6 +63,7 @@ export type ClientMessage =
   | RemoveExternalAssetDirectory
   | SaveAreaMappings
   | SetShowAreas
+  | ManagerTask
   | RequestDiagnostics;
 
 export interface ProviderCapabilities {
@@ -315,6 +317,14 @@ export interface AgentDiagnostics {
   agents: Record<string, any>[];
 }
 
+export interface ManagerTaskResult {
+  type: 'managerTaskResult';
+  requestId: string;
+  ok: boolean;
+  response?: string;
+  error?: string;
+}
+
 export interface WebviewReady {
   type: 'webviewReady';
 }
@@ -424,6 +434,12 @@ export interface SaveAreaMappings {
 export interface SetShowAreas {
   type: 'setShowAreas';
   enabled: boolean;
+}
+
+export interface ManagerTask {
+  type: 'managerTask';
+  requestId: string;
+  task: string;
 }
 
 export interface RequestDiagnostics {
