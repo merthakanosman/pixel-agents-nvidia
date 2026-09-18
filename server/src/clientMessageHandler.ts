@@ -33,6 +33,9 @@ export type SetHooksEnabledSideEffect = (
  */
 export type ReloadAssetsSideEffect = (send: WsSend) => Promise<void> | void;
 
+/** Run one task through the Pixel Agents-owned Manager worker. */
+export type RunManagerTaskSideEffect = (task: string) => Promise<string>;
+
 /** Cached assets loaded at server startup. Sent to each WebSocket client on webviewReady. */
 export interface AssetCache {
   characters: LoadedCharacterSprites | null;
@@ -52,6 +55,8 @@ export interface ClientMessageContext {
   onSetHooksEnabled?: SetHooksEnabledSideEffect;
   /** Reload assets after an external-asset-directory change. Needs the dist root, known only to cli.ts. */
   onReloadAssets?: ReloadAssetsSideEffect;
+  /** Execute a task with the NVIDIA-backed Manager worker. */
+  onRunManagerTask?: RunManagerTaskSideEffect;
   /**
    * Whether this client may send messages that reach OUTSIDE `~/.pixel-agents/`
    * — today only `setHooksEnabled`, which grants machine-wide consent to modify
@@ -109,6 +114,63 @@ export function handleClientMessage(
       // Point-to-point reply to the requesting socket (NOT a broadcast).
       send({ type: 'agentDiagnostics', agents: buildAgentDiagnostics(store) });
       break;
+
+    case 'managerTask': {
+      const requestId = typeof msg.requestId === 'string' ? msg.requestId : '';
+      const task = typeof msg.task === 'string' ? msg.task.trim() : '';
+      if (!requestId) break;
+
+      if (!ctx.privileged) {
+        send({
+          type: 'managerTaskResult',
+          requestId,
+          ok: false,
+          error: 'This Manager session requires the tokened local URL.',
+        });
+        break;
+      }
+
+      if (!task) {
+        send({ type: 'managerTaskResult', requestId, ok: false, error: 'Task cannot be empty.' });
+        break;
+      }
+
+      if (task.length > 8_000) {
+        send({
+          type: 'managerTaskResult',
+          requestId,
+          ok: false,
+          error: 'Task is too long. Maximum length is 8000 characters.',
+        });
+        break;
+      }
+
+      if (!ctx.onRunManagerTask) {
+        send({
+          type: 'managerTaskResult',
+          requestId,
+          ok: false,
+          error: 'Manager worker is not available.',
+        });
+        break;
+      }
+
+      void ctx
+        .onRunManagerTask(task)
+        .then((response) => {
+          send({ type: 'managerTaskResult', requestId, ok: true, response });
+        })
+        .catch((err: unknown) => {
+          console.error('[Pixel Agents] Manager task failed:', err);
+          send({
+            type: 'managerTaskResult',
+            requestId,
+            ok: false,
+            error: err instanceof Error ? err.message : 'Manager task failed.',
+          });
+        });
+      break;
+    }
 
     case 'saveLayout':
       if (msg.layout) {
