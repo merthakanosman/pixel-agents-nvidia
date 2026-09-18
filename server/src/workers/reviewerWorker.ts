@@ -16,9 +16,9 @@ const MAX_MODEL_OUTPUT_CHARS = 24_000;
 type ReviewerAction =
   | { action: 'list'; path?: string }
   | { action: 'read'; path: string }
-  | { action: 'status' }
-  | { action: 'diff' }
   | { action: 'final'; summary: string };
+
+type ReviewerGitAction = 'status' | 'diff';
 
 const REVIEWER_SYSTEM_PROMPT = `You are the Reviewer in an autonomous AI software company.
 Your job is to independently review implementation and test evidence before work is reported as complete.
@@ -28,14 +28,13 @@ For EVERY turn, respond with exactly one JSON object and no markdown.
 Allowed actions:
 {"action":"list","path":"."}
 {"action":"read","path":"relative/file.ts"}
-{"action":"status"}
-{"action":"diff"}
 {"action":"final","summary":"Turkish evidence-based review report"}
 
 Rules:
+- STATUS and DIFF are executed automatically before your first model turn and their real TOOL_RESULT evidence is already provided to you.
+- Do not request status or diff actions yourself.
 - Use real workspace evidence for implementation or code review.
-- Use status and diff to inspect actual workspace changes when reviewing implementation work.
-- Use list/read when you need surrounding code or an untracked file that is not present in diff output.
+- Use list/read only when you need surrounding code or an untracked file that is not present in the automatic diff output.
 - Paths must be relative to the workspace.
 - Never request or expose secrets.
 - You are read-only. Never modify files and never run arbitrary shell or git mutation commands.
@@ -78,10 +77,6 @@ function parseAction(text: string): ReviewerAction {
       throw new Error('Reviewer read action requires a path.');
     }
     return { action, path: value['path'] };
-  }
-
-  if (action === 'status' || action === 'diff') {
-    return { action };
   }
 
   if (action === 'final') {
@@ -186,6 +181,15 @@ export class ReviewerWorker {
       ];
       const evidence: string[] = [];
 
+      for (const gitAction of ['status', 'diff'] as const) {
+        const toolResult = await this.executeGitInspection(id, agent, gitAction);
+        evidence.push(toolResult.evidence);
+        messages.push({
+          role: 'user',
+          content: `TOOL_RESULT\n${JSON.stringify(toolResult.result)}`,
+        });
+      }
+
       for (let step = 0; step < MAX_TOOL_STEPS; step++) {
         const response = await this.provider.generate({
           model: this.model,
@@ -259,19 +263,8 @@ export class ReviewerWorker {
     const status =
       action.action === 'list'
         ? `Listing ${action.path ?? '.'}`
-        : action.action === 'read'
-          ? `Reading ${action.path}`
-          : action.action === 'status'
-            ? 'Inspecting git status'
-            : 'Inspecting git diff';
-    const toolName =
-      action.action === 'read'
-        ? 'Read'
-        : action.action === 'list'
-          ? 'List'
-          : action.action === 'status'
-            ? 'Git Status'
-            : 'Git Diff';
+        : `Reading ${action.path}`;
+    const toolName = action.action === 'read' ? 'Read' : 'List';
 
     agent.activeToolIds.add(toolId);
     agent.activeToolStatuses.set(toolId, status);
@@ -307,17 +300,53 @@ export class ReviewerWorker {
         };
       }
 
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const target = action.path ?? '.';
+      return {
+        evidence: `${action.action.toUpperCase()} ${target} FAILED: ${message}`,
+        result: { ok: false, action: action.action, error: message },
+      };
+    } finally {
+      agent.activeToolIds.delete(toolId);
+      agent.activeToolStatuses.delete(toolId);
+      agent.activeToolNames.delete(toolId);
+      this.store.broadcast({ type: 'agentToolDone', id: agentId, toolId });
+    }
+  }
+
+  private async executeGitInspection(
+    agentId: number,
+    agent: AgentState,
+    action: ReviewerGitAction,
+  ): Promise<{ evidence: string; result: unknown }> {
+    const toolId = `reviewer-git-${Date.now()}-${action}`;
+    const status = action === 'status' ? 'Inspecting git status' : 'Inspecting git diff';
+    const toolName = action === 'status' ? 'Git Status' : 'Git Diff';
+
+    agent.activeToolIds.add(toolId);
+    agent.activeToolStatuses.set(toolId, status);
+    agent.activeToolNames.set(toolId, toolName);
+    this.store.broadcast({
+      type: 'agentToolStart',
+      id: agentId,
+      toolId,
+      status,
+      toolName,
+    });
+
+    try {
       const inspection =
-        action.action === 'status'
+        action === 'status'
           ? await this.gitInspector.status()
           : await this.gitInspector.diff();
       const ok = inspection.exitCode === 0 && !inspection.timedOut;
 
       return {
-        evidence: `${action.action.toUpperCase()} exit=${String(inspection.exitCode)} duration=${inspection.durationMs}ms timedOut=${String(inspection.timedOut)} truncated=${String(inspection.outputTruncated)}`,
+        evidence: `${action.toUpperCase()} exit=${String(inspection.exitCode)} duration=${inspection.durationMs}ms timedOut=${String(inspection.timedOut)} truncated=${String(inspection.outputTruncated)}`,
         result: {
           ok,
-          action: action.action,
+          action,
           ...inspection,
           stdout: compactOutput(inspection.stdout),
           stderr: compactOutput(inspection.stderr),
@@ -325,13 +354,9 @@ export class ReviewerWorker {
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const target =
-        action.action === 'read' || action.action === 'list'
-          ? action.path ?? '.'
-          : action.action;
       return {
-        evidence: `${action.action.toUpperCase()} ${target} FAILED: ${message}`,
-        result: { ok: false, action: action.action, error: message },
+        evidence: `${action.toUpperCase()} FAILED: ${message}`,
+        result: { ok: false, action, error: message },
       };
     } finally {
       agent.activeToolIds.delete(toolId);
