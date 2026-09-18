@@ -36,6 +36,8 @@ Rules:
 - Do not request status or diff actions yourself.
 - Use real workspace evidence for implementation or code review.
 - Use list/read only when you need surrounding code or an untracked file that is not present in the automatic diff output.
+- If LIST reports an entry with type "directory", never READ that path. LIST the directory instead if inspection is needed.
+- Only READ paths that are known or strongly expected to be files.
 - You may use at most 4 list/read actions in one review.
 - Never list the same directory twice and never read the same file twice.
 - Paths must be relative to the workspace.
