@@ -35,7 +35,9 @@ Rules:
 - STATUS and DIFF are executed automatically before your first model turn and their real TOOL_RESULT evidence is already provided to you.
 - Do not request status or diff actions yourself.
 - Use real workspace evidence for implementation or code review.
-- Use list/read only when you need surrounding code or an untracked file that is not present in the automatic diff output.
+- The system derives REVIEW_SCOPE from git STATUS. Prioritize only those changed/untracked paths.
+- Do not inspect unrelated repository files or directories when REVIEW_SCOPE is non-empty.
+- Use list/read only when you need a path inside REVIEW_SCOPE or minimal surrounding context directly related to it.
 - If LIST reports an entry with type "directory", never READ that path. LIST the directory instead if inspection is needed.
 - Only READ paths that are known or strongly expected to be files.
 - You may use at most 4 list/read actions in one review.
@@ -116,6 +118,42 @@ function rememberListedDirectories(result: unknown, knownDirectories: Set<string
     if (item['type'] !== 'directory' || typeof item['path'] !== 'string') continue;
     knownDirectories.add(normalizeInspectionPath(item['path']));
   }
+}
+
+function extractStatusPaths(result: unknown): string[] {
+  if (!result || typeof result !== 'object') return [];
+
+  const record = result as Record<string, unknown>;
+  if (record['action'] !== 'status' || typeof record['stdout'] !== 'string') return [];
+
+  const paths = new Set<string>();
+  for (const line of record['stdout'].split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const payload = line.length > 3 ? line.slice(3).trim() : '';
+    if (!payload) continue;
+
+    const target = payload.includes(' -> ')
+      ? payload.split(' -> ').at(-1)?.trim()
+      : payload;
+    if (!target) continue;
+
+    paths.add(normalizeInspectionPath(target.replace(/^"|"$/g, '')));
+  }
+
+  return [...paths];
+}
+
+function isPathInReviewScope(pathValue: string, reviewScope: Set<string>): boolean {
+  if (reviewScope.size === 0) return true;
+
+  const normalized = normalizeInspectionPath(pathValue);
+  for (const target of reviewScope) {
+    if (normalized === target) return true;
+    if (normalized !== '.' && target.startsWith(`${normalized}/`)) return true;
+    if (target !== '.' && normalized.startsWith(`${target}/`)) return true;
+  }
+
+  return false;
 }
 
 export class ReviewerWorker {
@@ -207,17 +245,33 @@ export class ReviewerWorker {
       const listedPaths = new Set<string>();
       const readPaths = new Set<string>();
       const knownDirectories = new Set<string>();
+      const reviewScope = new Set<string>();
       let lastResponse: AiGenerateResponse | null = null;
       let workspaceToolSteps = 0;
 
       for (const gitAction of ['status', 'diff'] as const) {
         const toolResult = await this.executeGitInspection(id, agent, gitAction);
         evidence.push(toolResult.evidence);
+
+        if (gitAction === 'status') {
+          for (const changedPath of extractStatusPaths(toolResult.result)) {
+            reviewScope.add(changedPath);
+          }
+        }
+
         messages.push({
           role: 'user',
           content: `TOOL_RESULT\n${JSON.stringify(toolResult.result)}`,
         });
       }
+
+      messages.push({
+        role: 'user',
+        content:
+          reviewScope.size > 0
+            ? `REVIEW_SCOPE\nOnly inspect these changed/untracked paths unless minimal directly-related context is required:\n${[...reviewScope].map((value) => `- ${value}`).join('\n')}\nWhen these paths are sufficiently inspected, return FINAL immediately.`
+            : 'REVIEW_SCOPE\nGit STATUS reported no changed/untracked paths. Do not browse the repository generally. Use existing STATUS/DIFF evidence and return FINAL unless the assigned task explicitly identifies a file that must be inspected.',
+      });
 
       for (let step = 0; step < MAX_MODEL_STEPS; step++) {
         const response = await this.provider.generate({
@@ -257,6 +311,22 @@ export class ReviewerWorker {
 
         const normalizedPath = normalizeInspectionPath(action.path ?? '.');
         const seenSet = action.action === 'read' ? readPaths : listedPaths;
+
+        if (!isPathInReviewScope(normalizedPath, reviewScope)) {
+          const scopeEvidence = `${action.action.toUpperCase()} ${normalizedPath} SKIPPED: outside review scope`;
+          evidence.push(scopeEvidence);
+          messages.push({
+            role: 'user',
+            content: `TOOL_RESULT\n${JSON.stringify({
+              ok: false,
+              action: action.action,
+              path: normalizedPath,
+              error: 'Path is outside REVIEW_SCOPE derived from git STATUS. Inspect changed/untracked paths only and return FINAL when sufficient.',
+              reviewScope: [...reviewScope],
+            })}`,
+          });
+          continue;
+        }
 
         if (action.action === 'read' && knownDirectories.has(normalizedPath)) {
           const directoryEvidence = `READ ${normalizedPath} SKIPPED: known directory`;
