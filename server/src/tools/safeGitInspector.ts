@@ -60,6 +60,27 @@ function sanitizeStatus(stdout: string): string {
     .join('\n');
 }
 
+function sanitizeDiff(stdout: string): string {
+  const sections = stdout.split(/(?=^diff --git )/m);
+
+  return sections
+    .filter((section) => {
+      if (!section.startsWith('diff --git ')) return true;
+
+      const header = section.split(/\r?\n/, 1)[0] ?? '';
+      const match = header.match(/^diff --git (.+) (.+)$/);
+      if (!match) return false;
+
+      const paths = match.slice(1).map((value) => {
+        const trimmed = value.trim().replace(/^"|"$/g, '');
+        return trimmed.replace(/^[ab]\//, '');
+      });
+
+      return !paths.some(isSensitivePath);
+    })
+    .join('');
+}
+
 export class SafeGitInspector {
   private readonly root: string;
 
@@ -147,7 +168,7 @@ export class SafeGitInspector {
           timedOut,
           outputTruncated,
           durationMs: Date.now() - startedAt,
-          stdout: filterStatus ? sanitizeStatus(stdout) : stdout,
+          stdout: filterStatus ? sanitizeStatus(stdout) : sanitizeDiff(stdout),
           stderr,
         });
       });
