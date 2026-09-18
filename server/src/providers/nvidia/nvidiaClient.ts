@@ -62,6 +62,7 @@ export class NvidiaClient {
         model: request.model,
         messages: request.messages,
         stream: false,
+        chat_template_kwargs: { enable_thinking: false },
         ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
         ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
       }),
