@@ -10,7 +10,7 @@ import { WorkspaceFileTools } from '../tools/workspaceFileTools.js';
 import type { AgentState } from '../types.js';
 
 const REVIEWER_AGENT_ID = 100_004;
-const MAX_TOOL_STEPS = 10;
+const MAX_TOOL_STEPS = 4;
 const MAX_MODEL_OUTPUT_CHARS = 24_000;
 
 type ReviewerAction =
@@ -35,6 +35,8 @@ Rules:
 - Do not request status or diff actions yourself.
 - Use real workspace evidence for implementation or code review.
 - Use list/read only when you need surrounding code or an untracked file that is not present in the automatic diff output.
+- You may use at most 4 list/read actions in one review.
+- Never list the same directory twice and never read the same file twice.
 - Paths must be relative to the workspace.
 - Never request or expose secrets.
 - You are read-only. Never modify files and never run arbitrary shell or git mutation commands.
@@ -180,6 +182,9 @@ export class ReviewerWorker {
         },
       ];
       const evidence: string[] = [];
+      const listedPaths = new Set<string>();
+      const readPaths = new Set<string>();
+      let lastResponse: AiGenerateResponse | null = null;
 
       for (const gitAction of ['status', 'diff'] as const) {
         const toolResult = await this.executeGitInspection(id, agent, gitAction);
@@ -197,6 +202,7 @@ export class ReviewerWorker {
           temperature: 0.1,
           maxTokens: 2600,
         });
+        lastResponse = response;
         this.updateContext(agent, id, response);
 
         let action: ReviewerAction;
@@ -225,6 +231,25 @@ export class ReviewerWorker {
           };
         }
 
+        const normalizedPath = action.path ?? '.';
+        const seenSet = action.action === 'read' ? readPaths : listedPaths;
+
+        if (seenSet.has(normalizedPath)) {
+          const duplicateEvidence = `${action.action.toUpperCase()} ${normalizedPath} SKIPPED: duplicate inspection request`;
+          evidence.push(duplicateEvidence);
+          messages.push({
+            role: 'user',
+            content: `TOOL_RESULT\n${JSON.stringify({
+              ok: false,
+              action: action.action,
+              path: normalizedPath,
+              error: 'Duplicate inspection request blocked. Use existing evidence and finish the review.',
+            })}`,
+          });
+          continue;
+        }
+
+        seenSet.add(normalizedPath);
         const toolResult = await this.executeAction(id, agent, step, action);
         evidence.push(toolResult.evidence);
         messages.push({
@@ -233,9 +258,17 @@ export class ReviewerWorker {
         });
       }
 
-      throw new Error(
-        `Reviewer reached the ${MAX_TOOL_STEPS}-step inspection tool limit without finishing.`,
-      );
+      if (!lastResponse) {
+        throw new Error('Reviewer did not receive a model response.');
+      }
+
+      const evidenceText = evidence.map((entry) => `- ${entry}`).join('\n');
+      return {
+        ...lastResponse,
+        content:
+          `İnceleme tamamlanamadı: Reviewer en fazla ${MAX_TOOL_STEPS} LIST/READ adımını kullandı ve FINAL yanıtına ulaşamadı. Mevcut gerçek kanıtlar aşağıdadır; bu sonuç tamamlanmış onay sayılmaz.\n\n` +
+          `İnceleme kanıtı:\n${evidenceText}`,
+      };
     } finally {
       agent.activeToolIds.delete(turnToolId);
       agent.activeToolStatuses.delete(turnToolId);
