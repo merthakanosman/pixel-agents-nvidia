@@ -9,7 +9,6 @@
  */
 
 import * as path from 'path';
-import { loadEnvFile } from 'node:process';
 
 import { AgentRuntime } from './agentRuntime.js';
 import { AgentStateStore } from './agentStateStore.js';
@@ -112,7 +111,7 @@ function copyHookScriptOrReport(packageRoot: string, context = ''): boolean {
 
 async function main(): Promise<void> {
   try {
-    loadEnvFile(path.join(process.cwd(), '.env'));
+    process.loadEnvFile(path.join(process.cwd(), '.env'));
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== 'ENOENT') throw err;
