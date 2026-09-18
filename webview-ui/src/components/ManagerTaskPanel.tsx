@@ -42,7 +42,7 @@ export function ManagerTaskPanel() {
   };
 
   return (
-    <div className="absolute bottom-10 right-10 z-20 w-[420px] pixel-panel p-6">
+    <div className="absolute bottom-10 right-10 z-20 w-[560px] max-w-[calc(100vw-20px)] pixel-panel p-6">
       <div className="text-base text-accent-bright mb-4">Manager</div>
       <textarea
         value={task}
@@ -71,10 +71,10 @@ export function ManagerTaskPanel() {
 
       {(response || error) && (
         <div className="mt-6 border-t-2 border-border pt-5">
-          <div className="text-2xs text-text-muted mb-3">
+          <div className="text-sm text-text-muted mb-3 font-bold">
             {error ? 'Error' : 'Manager response'}
           </div>
-          <div className="text-sm text-text whitespace-pre-wrap max-h-48 overflow-y-auto">
+          <div className="text-base leading-relaxed text-text whitespace-pre-wrap max-h-[360px] min-h-24 overflow-y-auto pr-2">
             {error || response}
           </div>
         </div>
