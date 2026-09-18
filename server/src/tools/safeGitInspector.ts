@@ -29,10 +29,6 @@ export interface SafeGitInspectionResult {
   stderr: string;
 }
 
-function toPosix(value: string): string {
-  return value.split(path.sep).join('/');
-}
-
 function isSensitivePath(input: string): boolean {
   const normalized = input.replace(/^"|"$/g, '').replaceAll('\\\\', '/');
   const parts = normalized.split('/').filter(Boolean);
@@ -78,7 +74,7 @@ export class SafeGitInspector {
 
   diff(): Promise<SafeGitInspectionResult> {
     return this.runGit(
-      ['diff', 'HEAD', '--no-ext-diff', '--no-textconv', '--', '.', ...DIFF_EXCLUDES],
+      ['diff', '--no-ext-diff', '--no-textconv', 'HEAD', '--', '.', ...DIFF_EXCLUDES],
       false,
     );
   }
