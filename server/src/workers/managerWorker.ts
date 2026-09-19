@@ -95,6 +95,10 @@ Rules:
 - Split real work into the smallest useful tasks.
 - Preserve the user's explicit execution constraints verbatim in the relevant task description, including exact commands, cwd values, file paths, and worker restrictions.
 - Do not change, simplify, normalize, infer, or omit an exact command, cwd, file path, or other explicit execution parameter supplied by the user.
+- Never invent a cwd, absolute directory, file path, or exact command that the user did not provide.
+- In particular, never introduce temporary locations such as /tmp, %TEMP%, or another external directory unless the user explicitly requested them.
+- If the user did not specify cwd, keep the task workspace-relative and treat the workspace root as the implicit default. Do not add a cwd field or literal cwd value just to make the plan more specific.
+- If the user did not specify an exact command, delegate the required outcome and let the assigned worker choose an allowed command when needed.
 - If the user explicitly requires only one specific worker, create tasks only for that worker and do not add other workers.
 - If the user provides an exact command or cwd, include it explicitly in the delegated task description.
 - Order tasks by dependency because they execute sequentially.
