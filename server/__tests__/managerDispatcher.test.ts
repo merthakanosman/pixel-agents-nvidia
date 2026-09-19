@@ -201,4 +201,125 @@ describe('ManagerDispatcher company history', () => {
       }),
     );
   });
+
+  it('retries a failed task as a new run without creating a new task or session', async () => {
+    const developerRun = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('İlk deneme çöktü'))
+      .mockResolvedValueOnce(response('İkinci deneme tamamlandı'));
+    const manager = {
+      plan: vi.fn().mockResolvedValue(
+        response(
+          JSON.stringify({
+            tasks: [
+              {
+                title: 'Kodu düzelt',
+                description: 'Değişikliği yap',
+                assignee: 'developer',
+              },
+            ],
+          }),
+        ),
+      ),
+      run: vi.fn(),
+      summarize: vi
+        .fn()
+        .mockResolvedValueOnce(response('İlk deneme başarısız oldu'))
+        .mockResolvedValueOnce(response('Retry sonrası tamamlandı')),
+    } as unknown as ManagerWorker;
+
+    const registry = new WorkerRegistry();
+    registry.register({
+      role: 'developer',
+      displayName: 'Developer',
+      agentId: 100_002,
+      run: developerRun,
+    });
+
+    const store = new CompanyTaskStore();
+    const dispatcher = new ManagerDispatcher(manager, registry, store);
+
+    await expect(dispatcher.run('Bir değişiklik yap')).resolves.toBe(
+      'İlk deneme başarısız oldu',
+    );
+    await expect(dispatcher.retryTask('task-1')).resolves.toBe('Retry sonrası tamamlandı');
+
+    expect(store.listSessions()).toHaveLength(1);
+    expect(store.list()).toHaveLength(1);
+    expect(store.listRuns()).toEqual([
+      expect.objectContaining({
+        id: 'run-1',
+        taskId: 'task-1',
+        attempt: 1,
+        status: 'failed',
+        error: 'İlk deneme çöktü',
+      }),
+      expect.objectContaining({
+        id: 'run-2',
+        taskId: 'task-1',
+        attempt: 2,
+        status: 'completed',
+        result: 'İkinci deneme tamamlandı',
+      }),
+    ]);
+    expect(store.listRuns()[1]?.input).toContain('This is retry attempt 2');
+    expect(store.listRuns()[1]?.input).toContain('İlk deneme çöktü');
+    expect(store.list()[0]).toEqual(
+      expect.objectContaining({
+        id: 'task-1',
+        sessionId: 'session-1',
+        status: 'completed',
+        result: 'İkinci deneme tamamlandı',
+      }),
+    );
+    expect(store.listSessions()[0]).toEqual(
+      expect.objectContaining({
+        id: 'session-1',
+        status: 'completed',
+        finalResponse: 'Retry sonrası tamamlandı',
+      }),
+    );
+  });
+
+  it('rejects retry for a task that is not failed', async () => {
+    const developerRun = vi.fn().mockResolvedValue(response('Tamamlandı'));
+    const manager = {
+      plan: vi.fn().mockResolvedValue(
+        response(
+          JSON.stringify({
+            tasks: [
+              {
+                title: 'Kodu düzelt',
+                description: 'Değişikliği yap',
+                assignee: 'developer',
+              },
+            ],
+          }),
+        ),
+      ),
+      run: vi.fn(),
+      summarize: vi.fn().mockResolvedValue(response('Tamamlandı')),
+    } as unknown as ManagerWorker;
+
+    const registry = new WorkerRegistry();
+    registry.register({
+      role: 'developer',
+      displayName: 'Developer',
+      agentId: 100_002,
+      run: developerRun,
+    });
+
+    const store = new CompanyTaskStore();
+    const dispatcher = new ManagerDispatcher(manager, registry, store);
+
+    await dispatcher.run('Bir değişiklik yap');
+    await expect(dispatcher.retryTask('task-1')).rejects.toThrow(
+      'Only failed company tasks can be retried: task-1',
+    );
+
+    expect(store.list()).toHaveLength(1);
+    expect(store.listRuns()).toHaveLength(1);
+    expect(store.listSessions()).toHaveLength(1);
+  });
+
 });

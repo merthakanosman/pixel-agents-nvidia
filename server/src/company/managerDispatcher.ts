@@ -73,26 +73,7 @@ export class ManagerDispatcher {
           continue;
         }
 
-        const previousResults = completed
-          .filter((previous) => previous.status === 'completed' && previous.result)
-          .map(
-            (previous) =>
-              `[${previous.assignee}] ${previous.title}:\n${previous.result ?? ''}`,
-          )
-          .join('\n\n');
-
-        const workerInput = [
-          `Company task: ${task.title}`,
-          task.description,
-          `Original user request:\n${userRequest}`,
-          previousResults
-            ? `Previous completed company work you may need to validate or build on:\n\n${previousResults}`
-            : '',
-          'Return a concise work result for the Manager.',
-        ]
-          .filter(Boolean)
-          .join('\n\n');
-
+        const workerInput = this.buildWorkerInput(task, userRequest, completed);
         const run = this.taskStore.startRun(task.id, workerInput);
 
         try {
@@ -111,20 +92,7 @@ export class ManagerDispatcher {
         completed.push(task);
       }
 
-      const finalResponse = (
-        await this.manager.summarize(
-          userRequest,
-          plan,
-          completed.map((task) => ({
-            title: task.title,
-            assignee: task.assignee,
-            status: task.status,
-            result: task.result,
-            error: task.error,
-          })),
-        )
-      ).content;
-
+      const finalResponse = await this.summarizeSession(userRequest, plan, completed);
       this.taskStore.updateSession(session.id, {
         status: completed.every((task) => task.status === 'completed') ? 'completed' : 'failed',
         finalResponse,
@@ -135,5 +103,153 @@ export class ManagerDispatcher {
       this.taskStore.updateSession(session.id, { status: 'failed' });
       throw err;
     }
+  }
+
+  async retryTask(taskId: string): Promise<string> {
+    const task = this.taskStore.list().find((candidate) => candidate.id === taskId);
+    if (!task) {
+      throw new Error(`Unknown company task: ${taskId}`);
+    }
+    if (task.status !== 'failed') {
+      throw new Error(`Only failed company tasks can be retried: ${taskId}`);
+    }
+    if (!task.sessionId) {
+      throw new Error(`Company task is not attached to a retryable session: ${taskId}`);
+    }
+
+    const session = this.taskStore
+      .listSessions()
+      .find((candidate) => candidate.id === task.sessionId);
+    if (!session) {
+      throw new Error(`Unknown company session: ${task.sessionId}`);
+    }
+    if (session.userRequest === null) {
+      throw new Error(`Cannot retry legacy task without its original user request: ${taskId}`);
+    }
+
+    const worker = this.registry.get(task.assignee);
+    if (!worker) {
+      throw new Error(`No worker registered for role "${task.assignee}".`);
+    }
+
+    const sessionTasks = this.taskStore
+      .list()
+      .filter((candidate) => candidate.sessionId === session.id);
+    const completedContext = sessionTasks.filter(
+      (candidate) => candidate.id !== task.id && candidate.status === 'completed',
+    );
+    const previousRuns = this.taskStore
+      .listRuns()
+      .filter((run) => run.taskId === task.id)
+      .sort((left, right) => left.attempt - right.attempt);
+    const previousRun = previousRuns.at(-1);
+    const previousFailure = previousRun?.error ?? task.error ?? 'Unknown failure';
+
+    const retryContext = [
+      `This is retry attempt ${(previousRun?.attempt ?? 0) + 1} for the same company task.`,
+      `Previous attempt failed with:\n${previousFailure}`,
+      'Inspect the current workspace state first. Preserve work that is already correct and only complete or repair what remains.',
+    ].join('\n\n');
+
+    this.taskStore.updateSession(session.id, { status: 'running' });
+
+    try {
+      const workerInput = this.buildWorkerInput(
+        task,
+        session.userRequest,
+        completedContext,
+        retryContext,
+      );
+      const run = this.taskStore.startRun(task.id, workerInput);
+
+      try {
+        const result = await worker.run(workerInput);
+        this.taskStore.updateRun(run.id, {
+          status: 'completed',
+          result: result.content,
+        });
+      } catch (err) {
+        this.taskStore.updateRun(run.id, {
+          status: 'failed',
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      const refreshedTasks = this.taskStore
+        .list()
+        .filter((candidate) => candidate.sessionId === session.id);
+      const retryPlan: ManagerPlan = {
+        tasks: refreshedTasks.map((candidate) => ({
+          title: candidate.title,
+          description: candidate.description,
+          assignee: candidate.assignee,
+        })),
+      };
+
+      const finalResponse = await this.summarizeSession(
+        session.userRequest,
+        retryPlan,
+        refreshedTasks,
+      );
+      this.taskStore.updateSession(session.id, {
+        status: refreshedTasks.every((candidate) => candidate.status === 'completed')
+          ? 'completed'
+          : 'failed',
+        finalResponse,
+      });
+
+      return finalResponse;
+    } catch (err) {
+      this.taskStore.updateSession(session.id, { status: 'failed' });
+      throw err;
+    }
+  }
+
+  private buildWorkerInput(
+    task: CompanyTask,
+    userRequest: string,
+    completed: readonly CompanyTask[],
+    retryContext?: string,
+  ): string {
+    const previousResults = completed
+      .filter((previous) => previous.status === 'completed' && previous.result)
+      .map(
+        (previous) =>
+          `[${previous.assignee}] ${previous.title}:\n${previous.result ?? ''}`,
+      )
+      .join('\n\n');
+
+    return [
+      `Company task: ${task.title}`,
+      task.description,
+      `Original user request:\n${userRequest}`,
+      previousResults
+        ? `Previous completed company work you may need to validate or build on:\n\n${previousResults}`
+        : '',
+      retryContext ?? '',
+      'Return a concise work result for the Manager.',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  private async summarizeSession(
+    userRequest: string,
+    plan: ManagerPlan,
+    tasks: readonly CompanyTask[],
+  ): Promise<string> {
+    return (
+      await this.manager.summarize(
+        userRequest,
+        plan,
+        tasks.map((task) => ({
+          title: task.title,
+          assignee: task.assignee,
+          status: task.status,
+          result: task.result,
+          error: task.error,
+        })),
+      )
+    ).content;
   }
 }
