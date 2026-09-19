@@ -184,6 +184,7 @@ export class DeveloperWorker {
       ];
 
       const evidence: string[] = [];
+      const successfulWrites = new Map<string, string>();
       let lastResponse: AiGenerateResponse | null = null;
 
       for (let step = 0; step < MAX_TOOL_STEPS; step++) {
@@ -211,6 +212,23 @@ export class DeveloperWorker {
         messages.push({ role: 'assistant', content: response.content });
 
         if (action.action === 'final') {
+          const verification = this.verifyWrites(successfulWrites);
+          evidence.push(...verification.evidence);
+
+          if (!verification.ok) {
+            messages.push({
+              role: 'user',
+              content: `TOOL_RESULT\n${JSON.stringify({
+                ok: false,
+                action: 'verify_writes',
+                errors: verification.errors,
+                message:
+                  'FINAL blocked because one or more successful WRITE actions could not be verified. Repair the files with WRITE actions before returning final.',
+              })}`,
+            });
+            continue;
+          }
+
           const writeEvidence = evidence.filter((entry) => entry.startsWith('WRITE '));
           const evidenceText =
             evidence.length > 0
@@ -229,6 +247,17 @@ export class DeveloperWorker {
 
         const toolResult = this.executeAction(id, agent, step, action);
         evidence.push(toolResult.evidence);
+
+        if (action.action === 'write') {
+          const result =
+            toolResult.result && typeof toolResult.result === 'object'
+              ? (toolResult.result as Record<string, unknown>)
+              : null;
+          if (result?.['ok'] === true && typeof result['path'] === 'string') {
+            successfulWrites.set(result['path'], action.content);
+          }
+        }
+
         messages.push({
           role: 'user',
           content: `TOOL_RESULT\n${JSON.stringify(toolResult.result)}`,
@@ -316,6 +345,37 @@ export class DeveloperWorker {
       agent.activeToolNames.delete(toolId);
       this.store.broadcast({ type: 'agentToolDone', id: agentId, toolId });
     }
+  }
+
+  private verifyWrites(writes: ReadonlyMap<string, string>): {
+    ok: boolean;
+    evidence: string[];
+    errors: string[];
+  } {
+    const evidence: string[] = [];
+    const errors: string[] = [];
+
+    for (const [pathValue, expectedContent] of writes) {
+      try {
+        const read = this.fileTools.read(pathValue);
+        if (read.content !== expectedContent) {
+          const message = `VERIFY_WRITE ${read.path} FAILED: content mismatch`;
+          evidence.push(message);
+          errors.push(message);
+          continue;
+        }
+
+        evidence.push(`VERIFY_WRITE ${read.path} (${read.bytes} bytes, content matched)`);
+      } catch (err) {
+        const message = `VERIFY_WRITE ${pathValue} FAILED: ${
+          err instanceof Error ? err.message : String(err)
+        }`;
+        evidence.push(message);
+        errors.push(message);
+      }
+    }
+
+    return { ok: errors.length === 0, evidence, errors };
   }
 
   private updateContext(agent: AgentState, agentId: number, response: AiGenerateResponse): void {
