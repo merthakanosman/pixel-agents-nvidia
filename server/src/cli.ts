@@ -307,7 +307,7 @@ async function main(): Promise<void> {
         run: (task: string) => reviewerWorker.run(task),
       });
 
-      const companyTaskStore = new CompanyTaskStore();
+      const companyTaskStore = new CompanyTaskStore({ workspaceRoot: process.cwd() });
       const dispatcher = new ManagerDispatcher(managerWorker, workerRegistry, companyTaskStore);
       onRunManagerTask = (task: string) => dispatcher.run(task);
 
