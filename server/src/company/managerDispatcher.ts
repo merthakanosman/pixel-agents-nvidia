@@ -43,31 +43,36 @@ export class ManagerDispatcher {
   ) {}
 
   async run(userRequest: string): Promise<string> {
-    const planResponse = await this.manager.plan(userRequest, this.registry.describeForManager());
-    const plan = parsePlan(planResponse.content);
+    const session = this.taskStore.createSession(userRequest);
 
-    if (plan.tasks.length === 0) {
-      return plan.reply ?? (await this.manager.run(userRequest)).content;
-    }
+    try {
+      const planResponse = await this.manager.plan(userRequest, this.registry.describeForManager());
+      const plan = parsePlan(planResponse.content);
 
-    const completed: CompanyTask[] = [];
-
-    for (const planned of plan.tasks) {
-      const worker = this.registry.get(planned.assignee);
-      const task = this.taskStore.create(planned);
-
-      if (!worker) {
-        this.taskStore.update(task.id, {
-          status: 'failed',
-          error: `No worker registered for role "${planned.assignee}".`,
+      if (plan.tasks.length === 0) {
+        const response = plan.reply ?? (await this.manager.run(userRequest)).content;
+        this.taskStore.updateSession(session.id, {
+          status: 'completed',
+          finalResponse: response,
         });
-        completed.push(task);
-        continue;
+        return response;
       }
 
-      this.taskStore.update(task.id, { status: 'running' });
+      const completed: CompanyTask[] = [];
 
-      try {
+      for (const planned of plan.tasks) {
+        const worker = this.registry.get(planned.assignee);
+        const task = this.taskStore.create(planned, session.id);
+
+        if (!worker) {
+          this.taskStore.update(task.id, {
+            status: 'failed',
+            error: `No worker registered for role "${planned.assignee}".`,
+          });
+          completed.push(task);
+          continue;
+        }
+
         const previousResults = completed
           .filter((previous) => previous.status === 'completed' && previous.result)
           .map(
@@ -76,45 +81,59 @@ export class ManagerDispatcher {
           )
           .join('\n\n');
 
-        const result = await worker.run(
-          [
-            `Company task: ${task.title}`,
-            task.description,
-            `Original user request:\n${userRequest}`,
-            previousResults
-              ? `Previous completed company work you may need to validate or build on:\n\n${previousResults}`
-              : '',
-            'Return a concise work result for the Manager.',
-          ]
-            .filter(Boolean)
-            .join('\n\n'),
-        );
-        this.taskStore.update(task.id, {
-          status: 'completed',
-          result: result.content,
-        });
-      } catch (err) {
-        this.taskStore.update(task.id, {
-          status: 'failed',
-          error: err instanceof Error ? err.message : String(err),
-        });
+        const workerInput = [
+          `Company task: ${task.title}`,
+          task.description,
+          `Original user request:\n${userRequest}`,
+          previousResults
+            ? `Previous completed company work you may need to validate or build on:\n\n${previousResults}`
+            : '',
+          'Return a concise work result for the Manager.',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+
+        const run = this.taskStore.startRun(task.id, workerInput);
+
+        try {
+          const result = await worker.run(workerInput);
+          this.taskStore.updateRun(run.id, {
+            status: 'completed',
+            result: result.content,
+          });
+        } catch (err) {
+          this.taskStore.updateRun(run.id, {
+            status: 'failed',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        completed.push(task);
       }
 
-      completed.push(task);
-    }
+      const finalResponse = (
+        await this.manager.summarize(
+          userRequest,
+          plan,
+          completed.map((task) => ({
+            title: task.title,
+            assignee: task.assignee,
+            status: task.status,
+            result: task.result,
+            error: task.error,
+          })),
+        )
+      ).content;
 
-    return (
-      await this.manager.summarize(
-        userRequest,
-        plan,
-        completed.map((task) => ({
-          title: task.title,
-          assignee: task.assignee,
-          status: task.status,
-          result: task.result,
-          error: task.error,
-        })),
-      )
-    ).content;
+      this.taskStore.updateSession(session.id, {
+        status: completed.every((task) => task.status === 'completed') ? 'completed' : 'failed',
+        finalResponse,
+      });
+
+      return finalResponse;
+    } catch (err) {
+      this.taskStore.updateSession(session.id, { status: 'failed' });
+      throw err;
+    }
   }
 }
