@@ -39,6 +39,7 @@ export type ServerMessage =
   | AreaMappingsLoaded
   | WorkspaceFolders
   | AgentDiagnostics
+  | ManagerHistory
   | ManagerTaskResult;
 
 export type ClientMessage =
@@ -64,6 +65,7 @@ export type ClientMessage =
   | SaveAreaMappings
   | SetShowAreas
   | ManagerTask
+  | ManagerRetryTask
   | RequestDiagnostics;
 
 export interface ProviderCapabilities {
@@ -317,6 +319,39 @@ export interface AgentDiagnostics {
   agents: Record<string, any>[];
 }
 
+export interface ManagerHistory {
+  type: 'managerHistory';
+  sessions: ManagerHistorySession[];
+}
+
+export interface ManagerHistorySession {
+  id: string;
+  userRequest: string | null;
+  status: string;
+  finalResponse?: string;
+  createdAt: number;
+  tasks: ManagerHistoryTask[];
+}
+
+export interface ManagerHistoryTask {
+  id: string;
+  title: string;
+  assignee: string;
+  status: string;
+  result?: string;
+  error?: string;
+  runs: ManagerHistoryRun[];
+}
+
+export interface ManagerHistoryRun {
+  id: string;
+  attempt: number;
+  status: string;
+  result?: string;
+  error?: string;
+  createdAt: number;
+}
+
 export interface ManagerTaskResult {
   type: 'managerTaskResult';
   requestId: string;
@@ -440,6 +475,12 @@ export interface ManagerTask {
   type: 'managerTask';
   requestId: string;
   task: string;
+}
+
+export interface ManagerRetryTask {
+  type: 'managerRetryTask';
+  requestId: string;
+  taskId: string;
 }
 
 export interface RequestDiagnostics {

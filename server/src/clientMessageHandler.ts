@@ -1,3 +1,4 @@
+import type { ManagerHistorySession } from '../../core/src/messages.js';
 import type { HookProvider } from '../../core/src/provider.js';
 import { resendAgentActivity } from './agentActivityResend.js';
 import { buildAgentDiagnostics } from './agentDiagnostics.js';
@@ -35,6 +36,10 @@ export type ReloadAssetsSideEffect = (send: WsSend) => Promise<void> | void;
 
 /** Run one task through the Pixel Agents-owned Manager worker. */
 export type RunManagerTaskSideEffect = (task: string) => Promise<string>;
+/** Retry one failed persisted company task. */
+export type RetryManagerTaskSideEffect = (taskId: string) => Promise<string>;
+/** Return the privileged UI-safe Manager history snapshot. */
+export type GetManagerHistorySideEffect = () => ManagerHistorySession[];
 
 /** Cached assets loaded at server startup. Sent to each WebSocket client on webviewReady. */
 export interface AssetCache {
@@ -57,6 +62,10 @@ export interface ClientMessageContext {
   onReloadAssets?: ReloadAssetsSideEffect;
   /** Execute a task with the NVIDIA-backed Manager worker. */
   onRunManagerTask?: RunManagerTaskSideEffect;
+  /** Retry one failed company task with the same task/session identity. */
+  onRetryManagerTask?: RetryManagerTaskSideEffect;
+  /** Read the persisted Manager history safe for UI exposure. */
+  getManagerHistory?: GetManagerHistorySideEffect;
   /**
    * Whether this client may send messages that reach OUTSIDE `~/.pixel-agents/`
    * — today only `setHooksEnabled`, which grants machine-wide consent to modify
@@ -159,6 +168,7 @@ export function handleClientMessage(
         .onRunManagerTask(task)
         .then((response) => {
           send({ type: 'managerTaskResult', requestId, ok: true, response });
+          sendManagerHistory(send, ctx);
         })
         .catch((err: unknown) => {
           console.error('[Pixel Agents] Manager task failed:', err);
@@ -168,6 +178,61 @@ export function handleClientMessage(
             ok: false,
             error: err instanceof Error ? err.message : 'Manager task failed.',
           });
+          sendManagerHistory(send, ctx);
+        });
+      break;
+    }
+
+    case 'managerRetryTask': {
+      const requestId = typeof msg.requestId === 'string' ? msg.requestId : '';
+      const taskId = typeof msg.taskId === 'string' ? msg.taskId.trim() : '';
+      if (!requestId) break;
+
+      if (!ctx.privileged) {
+        send({
+          type: 'managerTaskResult',
+          requestId,
+          ok: false,
+          error: 'This Manager session requires the tokened local URL.',
+        });
+        break;
+      }
+
+      if (!taskId) {
+        send({
+          type: 'managerTaskResult',
+          requestId,
+          ok: false,
+          error: 'Task id cannot be empty.',
+        });
+        break;
+      }
+
+      if (!ctx.onRetryManagerTask) {
+        send({
+          type: 'managerTaskResult',
+          requestId,
+          ok: false,
+          error: 'Manager retry is not available.',
+        });
+        break;
+      }
+
+      void ctx
+        .onRetryManagerTask(taskId)
+        .then((response) => {
+          send({ type: 'managerTaskResult', requestId, ok: true, response });
+          sendManagerHistory(send, ctx);
+        })
+        .catch((err: unknown) => {
+          console.error('[Pixel Agents] Manager retry failed:', err);
+          send({
+            type: 'managerTaskResult',
+            requestId,
+            ok: false,
+            error: err instanceof Error ? err.message : 'Manager retry failed.',
+          });
+          sendManagerHistory(send, ctx);
         });
       break;
     }
@@ -417,6 +482,18 @@ function standaloneConsentEffects(
   };
 }
 
+function sendManagerHistory(send: WsSend, ctx: ClientMessageContext): void {
+  if (!ctx.privileged || !ctx.getManagerHistory) return;
+  try {
+    send({
+      type: 'managerHistory',
+      sessions: ctx.getManagerHistory(),
+    });
+  } catch (err) {
+    console.error('[Pixel Agents] Failed to read Manager history:', err);
+  }
+}
+
 function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   const { store, runtime, cache } = ctx;
   const adapter = store.getAdapter();
@@ -522,7 +599,10 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
       });
   }
 
-  // 4b. Folder→Area mappings (must arrive before existingAgents so the
+  // 4b. Privileged Manager history snapshot. Never expose it to tokenless clients.
+  sendManagerHistory(send, ctx);
+
+  // 4c. Folder→Area mappings (must arrive before existingAgents so the
   // webview seat-preference logic has the dict when characters are created).
   send({
     type: 'areaMappingsLoaded',

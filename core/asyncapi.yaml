@@ -118,6 +118,7 @@ components:
         - $ref: '#/components/schemas/WorkspaceFolders'
         # Diagnostics
         - $ref: '#/components/schemas/AgentDiagnostics'
+        - $ref: '#/components/schemas/ManagerHistory'
         - $ref: '#/components/schemas/ManagerTaskResult'
       discriminator: type
 
@@ -145,6 +146,7 @@ components:
         - $ref: '#/components/schemas/SaveAreaMappings'
         - $ref: '#/components/schemas/SetShowAreas'
         - $ref: '#/components/schemas/ManagerTask'
+        - $ref: '#/components/schemas/ManagerRetryTask'
         - $ref: '#/components/schemas/RequestDiagnostics'
       discriminator: type
 
@@ -788,6 +790,19 @@ components:
           items:
             type: object
 
+    ManagerHistory:
+      description: Privileged snapshot of persisted Manager company history. Worker run input is never exposed.
+      type: object
+      additionalProperties: false
+      required: [type, sessions]
+      properties:
+        type:
+          const: managerHistory
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerHistorySession'
+
     ManagerTaskResult:
       description: Result of a task sent to the NVIDIA-backed Manager worker.
       type: object
@@ -1087,6 +1102,19 @@ components:
         task:
           type: string
 
+    ManagerRetryTask:
+      description: Retry one failed persisted company task under the same task and session.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, taskId]
+      properties:
+        type:
+          const: managerRetryTask
+        requestId:
+          type: string
+        taskId:
+          type: string
+
     RequestDiagnostics:
       description: Request agent connection diagnostics (server responds with agentDiagnostics).
       type: object
@@ -1097,6 +1125,66 @@ components:
           const: requestDiagnostics
 
     # ── Supporting schemas ─────────────────────────────────────────
+
+    ManagerHistorySession:
+      type: object
+      additionalProperties: false
+      required: [id, userRequest, status, createdAt, tasks]
+      properties:
+        id:
+          type: string
+        userRequest:
+          type: [string, 'null']
+        status:
+          type: string
+        finalResponse:
+          type: string
+        createdAt:
+          type: integer
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerHistoryTask'
+
+    ManagerHistoryTask:
+      type: object
+      additionalProperties: false
+      required: [id, title, assignee, status, runs]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        assignee:
+          type: string
+        status:
+          type: string
+        result:
+          type: string
+        error:
+          type: string
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerHistoryRun'
+
+    ManagerHistoryRun:
+      type: object
+      additionalProperties: false
+      required: [id, attempt, status, createdAt]
+      properties:
+        id:
+          type: string
+        attempt:
+          type: integer
+        status:
+          type: string
+        result:
+          type: string
+        error:
+          type: string
+        createdAt:
+          type: integer
 
     AgentSeatMeta:
       description: |

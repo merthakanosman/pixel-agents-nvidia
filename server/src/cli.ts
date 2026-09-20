@@ -20,6 +20,7 @@ import {
 } from './assetReload.js';
 import type { AssetCache, ReloadAssetsSideEffect } from './clientMessageHandler.js';
 import { CompanyTaskStore } from './company/companyTaskStore.js';
+import { buildManagerHistory } from './company/managerHistory.js';
 import { ManagerDispatcher } from './company/managerDispatcher.js';
 import { WorkerRegistry } from './company/workerRegistry.js';
 import {
@@ -285,6 +286,8 @@ async function main(): Promise<void> {
     const testerWorker = tester;
     const reviewerWorker = reviewer;
     let onRunManagerTask: ((task: string) => Promise<string>) | undefined;
+    let onRetryManagerTask: ((taskId: string) => Promise<string>) | undefined;
+    let getManagerHistory: (() => ReturnType<typeof buildManagerHistory>) | undefined;
 
     if (managerWorker && developerWorker && testerWorker && reviewerWorker) {
       const workerRegistry = new WorkerRegistry();
@@ -310,6 +313,8 @@ async function main(): Promise<void> {
       const companyTaskStore = new CompanyTaskStore({ workspaceRoot: process.cwd() });
       const dispatcher = new ManagerDispatcher(managerWorker, workerRegistry, companyTaskStore);
       onRunManagerTask = (task: string) => dispatcher.run(task);
+      onRetryManagerTask = (taskId: string) => dispatcher.retryTask(taskId);
+      getManagerHistory = () => buildManagerHistory(companyTaskStore);
 
       console.log(
         '[Pixel Agents] Autonomous company dispatcher ready (developer, tester, reviewer registered)',
@@ -327,6 +332,8 @@ async function main(): Promise<void> {
       onSetHooksEnabled,
       onReloadAssets,
       onRunManagerTask,
+      onRetryManagerTask,
+      getManagerHistory,
     });
     currentConfig = { port: config.port, token: config.token };
 

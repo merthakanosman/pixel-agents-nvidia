@@ -9,7 +9,9 @@ import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type {
   AssetCache,
+  GetManagerHistorySideEffect,
   ReloadAssetsSideEffect,
+  RetryManagerTaskSideEffect,
   RunManagerTaskSideEffect,
   SetHooksEnabledSideEffect,
 } from './clientMessageHandler.js';
@@ -48,6 +50,10 @@ export interface HttpServerOptions {
   onReloadAssets?: ReloadAssetsSideEffect;
   /** Invoked when a browser client submits a task to the NVIDIA Manager. */
   onRunManagerTask?: RunManagerTaskSideEffect;
+  /** Invoked when a browser client retries one failed persisted company task. */
+  onRetryManagerTask?: RetryManagerTaskSideEffect;
+  /** Returns the UI-safe persisted Manager history snapshot. */
+  getManagerHistory?: GetManagerHistorySideEffect;
 }
 
 /** Result of createHttpServer(). */
@@ -214,6 +220,8 @@ function registerWebSocketRoute(app: FastifyInstance, options: HttpServerOptions
           onSetHooksEnabled: options.onSetHooksEnabled,
           onReloadAssets: options.onReloadAssets,
           onRunManagerTask: options.onRunManagerTask,
+          onRetryManagerTask: options.onRetryManagerTask,
+          getManagerHistory: options.getManagerHistory,
           privileged,
         });
       } catch {

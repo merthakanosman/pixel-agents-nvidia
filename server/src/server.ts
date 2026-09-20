@@ -8,7 +8,9 @@ import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type {
   AssetCache,
+  GetManagerHistorySideEffect,
   ReloadAssetsSideEffect,
+  RetryManagerTaskSideEffect,
   RunManagerTaskSideEffect,
   SetHooksEnabledSideEffect,
 } from './clientMessageHandler.js';
@@ -71,6 +73,8 @@ export class PixelAgentsServer {
     onSetHooksEnabled?: SetHooksEnabledSideEffect;
     onReloadAssets?: ReloadAssetsSideEffect;
     onRunManagerTask?: RunManagerTaskSideEffect;
+    onRetryManagerTask?: RetryManagerTaskSideEffect;
+    getManagerHistory?: GetManagerHistorySideEffect;
   }): Promise<ServerConfig> {
     const embedded = options?.embedded ?? true;
     const wantsSpa = !embedded;
@@ -109,6 +113,8 @@ export class PixelAgentsServer {
       onSetHooksEnabled: options?.onSetHooksEnabled,
       onReloadAssets: options?.onReloadAssets,
       onRunManagerTask: options?.onRunManagerTask,
+      onRetryManagerTask: options?.onRetryManagerTask,
+      getManagerHistory: options?.getManagerHistory,
     });
 
     this.app = app;
