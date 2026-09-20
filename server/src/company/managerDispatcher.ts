@@ -50,7 +50,7 @@ export class ManagerDispatcher {
       const plan = parsePlan(planResponse.content);
 
       if (plan.tasks.length === 0) {
-        const response = plan.reply ?? (await this.manager.run(userRequest)).content;
+        const response = (await this.manager.run(userRequest)).content;
         this.taskStore.updateSession(session.id, {
           status: 'completed',
           finalResponse: response,

@@ -79,7 +79,6 @@ ${availableWorkers || '- none'}
 
 Return JSON only, with exactly this shape:
 {
-  "reply": "optional direct reply when no delegation is needed",
   "tasks": [
     {
       "title": "short task title",
@@ -91,7 +90,8 @@ Return JSON only, with exactly this shape:
 
 Rules:
 - Use only roles from the available workers list.
-- If this is casual conversation or no specialist work is needed, return an empty tasks array and put the answer in reply.
+- This turn is planning only. Do not answer the user's request in this JSON.
+- If this is casual conversation or no specialist work is needed, return an empty tasks array. A separate Manager turn will produce the user-facing answer.
 - Split real work into the smallest useful tasks.
 - Preserve the user's explicit execution constraints verbatim in the relevant task description, including exact commands, cwd values, file paths, and worker restrictions.
 - Do not change, simplify, normalize, infer, or omit an exact command, cwd, file path, or other explicit execution parameter supplied by the user.

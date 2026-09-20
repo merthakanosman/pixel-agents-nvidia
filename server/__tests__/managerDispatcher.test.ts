@@ -112,36 +112,40 @@ describe('ManagerDispatcher company history', () => {
     expect(testerRun).toHaveBeenCalledWith(runs[1]?.input);
   });
 
-  it('persists a completed session even when the manager answers directly', async () => {
+  it('uses a separate Manager turn for direct answers and ignores planner reply text', async () => {
+    const userRequest =
+      'Sadece "History test başarılı." diye cevap ver. Hiçbir dosyayı değiştirme ve worker görevi oluşturma.';
     const manager = {
       plan: vi.fn().mockResolvedValue(
         response(
           JSON.stringify({
-            reply: 'Doğrudan cevap',
+            reply: userRequest,
             tasks: [],
           }),
         ),
       ),
-      run: vi.fn(),
+      run: vi.fn().mockResolvedValue(response('History test başarılı.')),
       summarize: vi.fn(),
     } as unknown as ManagerWorker;
 
     const store = new CompanyTaskStore();
     const dispatcher = new ManagerDispatcher(manager, new WorkerRegistry(), store);
 
-    await expect(dispatcher.run('Basit soru')).resolves.toBe('Doğrudan cevap');
+    await expect(dispatcher.run(userRequest)).resolves.toBe('History test başarılı.');
 
     expect(store.list()).toEqual([]);
     expect(store.listRuns()).toEqual([]);
     expect(store.listSessions()).toEqual([
       expect.objectContaining({
         id: 'session-1',
-        userRequest: 'Basit soru',
+        userRequest,
         status: 'completed',
-        finalResponse: 'Doğrudan cevap',
+        finalResponse: 'History test başarılı.',
       }),
     ]);
-    expect(manager.run).not.toHaveBeenCalled();
+    expect(manager.run).toHaveBeenCalledTimes(1);
+    expect(manager.run).toHaveBeenCalledWith(userRequest);
+    expect(manager.summarize).not.toHaveBeenCalled();
   });
 
   it('keeps a failed worker run and marks the session failed after the manager reports it', async () => {
