@@ -49,6 +49,7 @@ export interface Message {
   author: MessageAuthor;
   text: string;
   instagramMessageId?: string;
+  replyToInstagramMessageId?: string;
   createdAt: number;
 }
 
