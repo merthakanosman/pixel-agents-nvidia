@@ -7,6 +7,7 @@ import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
 import { EditActionBar } from './components/EditActionBar.js';
 import { ManagerTaskPanel } from './components/ManagerTaskPanel.js';
+import { SalesDmSimulatorPanel } from './components/SalesDmSimulatorPanel.js';
 import { MigrationNotice } from './components/MigrationNotice.js';
 import { SettingsModal } from './components/SettingsModal.js';
 import { Tooltip } from './components/Tooltip.js';
@@ -506,6 +507,7 @@ function App() {
       />
 
       {isBrowserRuntime && <ManagerTaskPanel />}
+      {isBrowserRuntime && <SalesDmSimulatorPanel />}
 
       <VersionIndicator
         currentVersion={extensionVersion}

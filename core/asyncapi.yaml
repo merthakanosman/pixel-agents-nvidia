@@ -120,6 +120,7 @@ components:
         - $ref: '#/components/schemas/AgentDiagnostics'
         - $ref: '#/components/schemas/ManagerHistory'
         - $ref: '#/components/schemas/ManagerTaskResult'
+        - $ref: '#/components/schemas/SalesSimulatorResult'
       discriminator: type
 
     ClientMessage:
@@ -147,6 +148,7 @@ components:
         - $ref: '#/components/schemas/SetShowAreas'
         - $ref: '#/components/schemas/ManagerTask'
         - $ref: '#/components/schemas/ManagerRetryTask'
+        - $ref: '#/components/schemas/SalesSimulatorMessage'
         - $ref: '#/components/schemas/RequestDiagnostics'
       discriminator: type
 
@@ -820,6 +822,39 @@ components:
         error:
           type: string
 
+    SalesSimulatorResult:
+      description: Result of a privileged local Sales Agent simulator message.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, ok, sandbox]
+      properties:
+        type:
+          const: salesSimulatorResult
+        requestId:
+          type: string
+        ok:
+          type: boolean
+        sandbox:
+          const: true
+        response:
+          type: string
+        error:
+          type: string
+        customerId:
+          type: string
+        conversationId:
+          type: string
+        leadStage:
+          type: string
+        orderStatus:
+          type: string
+        paymentStatus:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/SalesSimulatorMessageView'
+
     # ── Client message variants ────────────────────────────────────
 
     WebviewReady:
@@ -1115,6 +1150,25 @@ components:
         taskId:
           type: string
 
+    SalesSimulatorMessage:
+      description: Send one sandbox customer DM through the local Sales Agent conversation service.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, instagramUserId, message]
+      properties:
+        type:
+          const: salesSimulatorMessage
+        requestId:
+          type: string
+        instagramUserId:
+          type: string
+        username:
+          type: string
+        message:
+          type: string
+        messageId:
+          type: string
+
     RequestDiagnostics:
       description: Request agent connection diagnostics (server responds with agentDiagnostics).
       type: object
@@ -1125,6 +1179,22 @@ components:
           const: requestDiagnostics
 
     # ── Supporting schemas ─────────────────────────────────────────
+
+    SalesSimulatorMessageView:
+      type: object
+      additionalProperties: false
+      required: [id, direction, author, text, createdAt]
+      properties:
+        id:
+          type: string
+        direction:
+          type: string
+        author:
+          type: string
+        text:
+          type: string
+        createdAt:
+          type: integer
 
     ManagerHistorySession:
       type: object

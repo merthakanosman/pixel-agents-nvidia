@@ -130,11 +130,10 @@ describe('SalesAgentWorker', () => {
     )).toBe(true);
   });
 
-  it('uses real product data before giving a product price answer', async () => {
+  it('discovers active catalog data before giving a product price answer', async () => {
     const { worker, product, conversation, provider } = createHarness([
       JSON.stringify({
-        action: 'get_product',
-        productId: 'product-1',
+        action: 'list_products',
       }),
       JSON.stringify({
         action: 'final',

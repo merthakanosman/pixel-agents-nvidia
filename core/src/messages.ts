@@ -40,7 +40,8 @@ export type ServerMessage =
   | WorkspaceFolders
   | AgentDiagnostics
   | ManagerHistory
-  | ManagerTaskResult;
+  | ManagerTaskResult
+  | SalesSimulatorResult;
 
 export type ClientMessage =
   | WebviewReady
@@ -66,6 +67,7 @@ export type ClientMessage =
   | SetShowAreas
   | ManagerTask
   | ManagerRetryTask
+  | SalesSimulatorMessage
   | RequestDiagnostics;
 
 export interface ProviderCapabilities {
@@ -360,6 +362,29 @@ export interface ManagerTaskResult {
   error?: string;
 }
 
+export interface SalesSimulatorResult {
+  type: 'salesSimulatorResult';
+  requestId: string;
+  ok: boolean;
+  sandbox: true;
+  response?: string;
+  error?: string;
+  customerId?: string;
+  conversationId?: string;
+  leadStage?: string;
+  orderStatus?: string;
+  paymentStatus?: string;
+  messages?: SalesSimulatorMessageView[];
+}
+
+export interface SalesSimulatorMessageView {
+  id: string;
+  direction: string;
+  author: string;
+  text: string;
+  createdAt: number;
+}
+
 export interface WebviewReady {
   type: 'webviewReady';
 }
@@ -481,6 +506,15 @@ export interface ManagerRetryTask {
   type: 'managerRetryTask';
   requestId: string;
   taskId: string;
+}
+
+export interface SalesSimulatorMessage {
+  type: 'salesSimulatorMessage';
+  requestId: string;
+  instagramUserId: string;
+  username?: string;
+  message: string;
+  messageId?: string;
 }
 
 export interface RequestDiagnostics {

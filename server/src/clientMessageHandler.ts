@@ -4,6 +4,10 @@ import { resendAgentActivity } from './agentActivityResend.js';
 import { buildAgentDiagnostics } from './agentDiagnostics.js';
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import type {
+  LocalSalesConversationSnapshot,
+  LocalSalesMessageInput,
+} from './commerce/salesConversationService.js';
 import type { LoadedAssets, LoadedCharacterSprites, LoadedPetSprites } from './assetLoader.js';
 import {
   getHooksConsent,
@@ -40,6 +44,10 @@ export type RunManagerTaskSideEffect = (task: string) => Promise<string>;
 export type RetryManagerTaskSideEffect = (taskId: string) => Promise<string>;
 /** Return the privileged UI-safe Manager history snapshot. */
 export type GetManagerHistorySideEffect = () => ManagerHistorySession[];
+/** Run one sandbox DM through the local Sales Agent conversation service. */
+export type RunSalesSimulatorSideEffect = (
+  input: LocalSalesMessageInput,
+) => Promise<LocalSalesConversationSnapshot>;
 
 /** Cached assets loaded at server startup. Sent to each WebSocket client on webviewReady. */
 export interface AssetCache {
@@ -66,6 +74,8 @@ export interface ClientMessageContext {
   onRetryManagerTask?: RetryManagerTaskSideEffect;
   /** Read the persisted Manager history safe for UI exposure. */
   getManagerHistory?: GetManagerHistorySideEffect;
+  /** Execute one local sandbox sales conversation message. */
+  onRunSalesSimulator?: RunSalesSimulatorSideEffect;
   /**
    * Whether this client may send messages that reach OUTSIDE `~/.pixel-agents/`
    * — today only `setHooksEnabled`, which grants machine-wide consent to modify
@@ -233,6 +243,93 @@ export function handleClientMessage(
             error: err instanceof Error ? err.message : 'Manager retry failed.',
           });
           sendManagerHistory(send, ctx);
+        });
+      break;
+    }
+
+    case 'salesSimulatorMessage': {
+      const requestId = typeof msg.requestId === 'string' ? msg.requestId : '';
+      const instagramUserId =
+        typeof msg.instagramUserId === 'string' ? msg.instagramUserId.trim() : '';
+      const username = typeof msg.username === 'string' ? msg.username.trim() : undefined;
+      const message = typeof msg.message === 'string' ? msg.message.trim() : '';
+      const messageId = typeof msg.messageId === 'string' ? msg.messageId.trim() : undefined;
+      if (!requestId) break;
+
+      const fail = (error: string): void => {
+        send({
+          type: 'salesSimulatorResult',
+          requestId,
+          ok: false,
+          sandbox: true,
+          error,
+        });
+      };
+
+      if (!ctx.privileged) {
+        fail('Sales simulator requires the tokened local URL.');
+        break;
+      }
+      if (!ctx.onRunSalesSimulator) {
+        fail('Sales simulator is not available.');
+        break;
+      }
+      if (!instagramUserId) {
+        fail('Instagram user id cannot be empty.');
+        break;
+      }
+      if (instagramUserId.length > 256) {
+        fail('Instagram user id is too long.');
+        break;
+      }
+      if (username && username.length > 256) {
+        fail('Username is too long.');
+        break;
+      }
+      if (!message) {
+        fail('Message cannot be empty.');
+        break;
+      }
+      if (message.length > 4_000) {
+        fail('Message is too long. Maximum length is 4000 characters.');
+        break;
+      }
+      if (messageId && messageId.length > 512) {
+        fail('Message id is too long.');
+        break;
+      }
+
+      void ctx
+        .onRunSalesSimulator({
+          instagramUserId,
+          ...(username ? { username } : {}),
+          message,
+          ...(messageId ? { messageId } : {}),
+        })
+        .then((result) => {
+          send({
+            type: 'salesSimulatorResult',
+            requestId,
+            ok: true,
+            sandbox: true,
+            response: result.response,
+            customerId: result.customerId,
+            conversationId: result.conversationId,
+            ...(result.leadStage ? { leadStage: result.leadStage } : {}),
+            ...(result.orderStatus ? { orderStatus: result.orderStatus } : {}),
+            ...(result.paymentStatus ? { paymentStatus: result.paymentStatus } : {}),
+            messages: result.messages.map((item) => ({
+              id: item.id,
+              direction: item.direction,
+              author: item.author,
+              text: item.text,
+              createdAt: item.createdAt,
+            })),
+          });
+        })
+        .catch((err: unknown) => {
+          console.error('[Pixel Agents] Sales simulator failed:', err);
+          fail(err instanceof Error ? err.message : 'Sales simulator failed.');
         });
       break;
     }

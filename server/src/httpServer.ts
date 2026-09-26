@@ -13,6 +13,7 @@ import type {
   ReloadAssetsSideEffect,
   RetryManagerTaskSideEffect,
   RunManagerTaskSideEffect,
+  RunSalesSimulatorSideEffect,
   SetHooksEnabledSideEffect,
 } from './clientMessageHandler.js';
 import { handleClientMessage } from './clientMessageHandler.js';
@@ -54,6 +55,8 @@ export interface HttpServerOptions {
   onRetryManagerTask?: RetryManagerTaskSideEffect;
   /** Returns the UI-safe persisted Manager history snapshot. */
   getManagerHistory?: GetManagerHistorySideEffect;
+  /** Executes one privileged local Sales Agent simulator message. */
+  onRunSalesSimulator?: RunSalesSimulatorSideEffect;
 }
 
 /** Result of createHttpServer(). */
@@ -222,6 +225,7 @@ function registerWebSocketRoute(app: FastifyInstance, options: HttpServerOptions
           onRunManagerTask: options.onRunManagerTask,
           onRetryManagerTask: options.onRetryManagerTask,
           getManagerHistory: options.getManagerHistory,
+          onRunSalesSimulator: options.onRunSalesSimulator,
           privileged,
         });
       } catch {

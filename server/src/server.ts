@@ -12,6 +12,7 @@ import type {
   ReloadAssetsSideEffect,
   RetryManagerTaskSideEffect,
   RunManagerTaskSideEffect,
+  RunSalesSimulatorSideEffect,
   SetHooksEnabledSideEffect,
 } from './clientMessageHandler.js';
 import {
@@ -75,6 +76,7 @@ export class PixelAgentsServer {
     onRunManagerTask?: RunManagerTaskSideEffect;
     onRetryManagerTask?: RetryManagerTaskSideEffect;
     getManagerHistory?: GetManagerHistorySideEffect;
+    onRunSalesSimulator?: RunSalesSimulatorSideEffect;
   }): Promise<ServerConfig> {
     const embedded = options?.embedded ?? true;
     const wantsSpa = !embedded;
@@ -115,6 +117,7 @@ export class PixelAgentsServer {
       onRunManagerTask: options?.onRunManagerTask,
       onRetryManagerTask: options?.onRetryManagerTask,
       getManagerHistory: options?.getManagerHistory,
+      onRunSalesSimulator: options?.onRunSalesSimulator,
     });
 
     this.app = app;

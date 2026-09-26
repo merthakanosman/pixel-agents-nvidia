@@ -20,6 +20,18 @@ import {
 } from './assetReload.js';
 import type { AssetCache, ReloadAssetsSideEffect } from './clientMessageHandler.js';
 import { CompanyTaskStore } from './company/companyTaskStore.js';
+import { CommerceStore } from './commerce/commerceStore.js';
+import { CommerceTools } from './commerce/commerceTools.js';
+import {
+  LocalSimulatorPaymentGateway,
+  LocalSimulatorShippingProvider,
+  seedLocalSalesProductFromEnv,
+} from './commerce/localSalesSimulator.js';
+import {
+  SalesConversationService,
+  type LocalSalesConversationSnapshot,
+  type LocalSalesMessageInput,
+} from './commerce/salesConversationService.js';
 import { buildManagerHistory } from './company/managerHistory.js';
 import { ManagerDispatcher } from './company/managerDispatcher.js';
 import { WorkerRegistry } from './company/workerRegistry.js';
@@ -41,6 +53,7 @@ import { PixelAgentsServer } from './server.js';
 import { DeveloperWorker } from './workers/developerWorker.js';
 import { ManagerWorker } from './workers/managerWorker.js';
 import { ReviewerWorker } from './workers/reviewerWorker.js';
+import { SalesAgentWorker } from './workers/salesAgentWorker.js';
 import { TesterWorker } from './workers/testerWorker.js';
 
 // ── Argument parsing ──────────────────────────────────────────
@@ -170,16 +183,49 @@ async function main(): Promise<void> {
     let developer: DeveloperWorker | null = null;
     let tester: TesterWorker | null = null;
     let reviewer: ReviewerWorker | null = null;
+    let salesAgent: SalesAgentWorker | null = null;
+    const commerceStore = new CommerceStore({ workspaceRoot: process.cwd() });
+    try {
+      const seededProduct = seedLocalSalesProductFromEnv(commerceStore);
+      if (seededProduct) {
+        console.log(
+          `[Pixel Agents] Local sales product ready (${seededProduct.sku}, stock ${seededProduct.stockQuantity})`,
+        );
+      } else {
+        console.log(
+          '[Pixel Agents] Local sales catalog is empty. Configure SALES_PRODUCT_* values in .env before testing product sales.',
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[Pixel Agents] Local sales product config ignored: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    const commerceTools = new CommerceTools(commerceStore, {
+      shipping: new LocalSimulatorShippingProvider(),
+      paymentGateway: new LocalSimulatorPaymentGateway(),
+    });
+
     if (nvidiaProvider.isConfigured() && nvidiaModel) {
       manager = new ManagerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
       developer = new DeveloperWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
       tester = new TesterWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
       reviewer = new ReviewerWorker(store, nvidiaProvider, nvidiaModel, process.cwd());
+      salesAgent = new SalesAgentWorker(
+        store,
+        nvidiaProvider,
+        nvidiaModel,
+        process.cwd(),
+        commerceStore,
+        commerceTools,
+      );
 
       const managerId = manager.spawn();
       const developerId = developer.spawn();
       const testerId = tester.spawn();
       const reviewerId = reviewer.spawn();
+      const salesAgentId = salesAgent.spawn();
 
       console.log(
         `[Pixel Agents] NVIDIA Manager worker ready (agent ${managerId}, model ${nvidiaModel})`,
@@ -192,6 +238,9 @@ async function main(): Promise<void> {
       );
       console.log(
         `[Pixel Agents] NVIDIA Reviewer worker ready (agent ${reviewerId}, model ${nvidiaModel})`,
+      );
+      console.log(
+        `[Pixel Agents] NVIDIA Sales Agent ready (agent ${salesAgentId}, model ${nvidiaModel})`,
       );
     } else {
       console.warn(
@@ -288,6 +337,15 @@ async function main(): Promise<void> {
     let onRunManagerTask: ((task: string) => Promise<string>) | undefined;
     let onRetryManagerTask: ((taskId: string) => Promise<string>) | undefined;
     let getManagerHistory: (() => ReturnType<typeof buildManagerHistory>) | undefined;
+    let onRunSalesSimulator:
+      | ((input: LocalSalesMessageInput) => Promise<LocalSalesConversationSnapshot>)
+      | undefined;
+
+    if (salesAgent) {
+      const salesConversationService = new SalesConversationService(commerceStore, salesAgent);
+      onRunSalesSimulator = (input) => salesConversationService.handleMessage(input);
+      console.log('[Pixel Agents] Local Sales DM simulator ready (sandbox mode)');
+    }
 
     if (managerWorker && developerWorker && testerWorker && reviewerWorker) {
       const workerRegistry = new WorkerRegistry();
@@ -334,6 +392,7 @@ async function main(): Promise<void> {
       onRunManagerTask,
       onRetryManagerTask,
       getManagerHistory,
+      onRunSalesSimulator,
     });
     currentConfig = { port: config.port, token: config.token };
 

@@ -34,6 +34,7 @@ export interface CommerceToolsOptions {
 }
 
 export type CommerceToolAction =
+  | { action: 'list_products' }
   | { action: 'get_product'; productId?: string; sku?: string }
   | { action: 'get_stock'; productId: string }
   | { action: 'get_customer'; customerId?: string; instagramUserId?: string }
@@ -103,6 +104,12 @@ export class CommerceTools {
   async execute(action: CommerceToolAction): Promise<CommerceToolResult> {
     try {
       switch (action.action) {
+        case 'list_products':
+          return this.success(
+            action.action,
+            this.store.listProducts().filter((product) => product.active),
+          );
+
         case 'get_product':
           return this.success(action.action, this.getProduct(action.productId, action.sku));
 

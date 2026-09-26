@@ -31,6 +31,7 @@ You talk directly to customers in natural Turkish and move conversations toward 
 For EVERY turn, respond with exactly one JSON object and no markdown.
 
 Allowed actions:
+{"action":"list_products"}
 {"action":"get_product","productId":"product-1"}
 {"action":"get_product","sku":"SKU-1"}
 {"action":"get_stock","productId":"product-1"}
@@ -139,6 +140,10 @@ function parseAction(text: string): SalesAgentAction {
 
   if (action === 'final') {
     return { action, message: requiredString(value['message'], 'final message') };
+  }
+
+  if (action === 'list_products') {
+    return { action };
   }
 
   if (action === 'get_product') {
